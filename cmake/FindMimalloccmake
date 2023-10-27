@@ -1,0 +1,57 @@
+SET(MIMALLOC_SEARCH_DIRS
+  #"d:/project/lib/mimalloc/"
+   "/usr/local/lib/",
+   "/usr/local/lib/mimalloc-1.7",
+   "/home/coui/jieun/3Drecon/mimalloc/include/"
+
+)
+
+set(MIMALLOC_INCLUDE_DIR /home/coui/jieun/3Drecon/mimalloc/include)
+#set(MIMALLOC_LIBRARY_DEBUG /usr/local/lib/libmimalloc-debug.so)
+#set(MIMALLOC_LIBRARY_RELEASE /usr/local/lib/libmimalloc.so)
+set(MIMALLOC_LIBRARY_DEBUG /usr/local/lib/)
+set(MIMALLOC_LIBRARY_RELEASE /usr/local/lib/)
+#FIND_PATH(MIMALLOC_INCLUDE_DIR
+#  NAMES
+#    mimalloc.h
+#  HINTS
+#    ${MIMALLOC_SEARCH_DIRS}
+#  PATH_SUFFIXES
+#    include
+#)
+
+#FIND_LIBRARY(MIMALLOC_LIBRARY_RELEASE
+#  NAMES
+#    mimalloc-static
+#  HINTS
+#    ${MIMALLOC_SEARCH_DIRS}
+#    #${MIMALLOC_SEARCH_DIRS}/out/msvc-x64/Release
+#  PATH_SUFFIXES
+#    lib64 lib
+#)
+
+#FIND_LIBRARY(MIMALLOC_LIBRARY_DEBUG
+#  NAMES
+#    mimalloc-static
+#  HINTS
+#    #${MIMALLOC_SEARCH_DIRS}/out/msvc-x64/Debug
+#  PATH_SUFFIXES
+#    lib64 lib
+#)
+
+# handle the QUIETLY and REQUIRED arguments and set MIMMALOC_FOUND to TRUE if
+# all listed variables are TRUE
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(MIMALLOC DEFAULT_MSG
+    MIMALLOC_INCLUDE_DIR MIMALLOC_LIBRARY_RELEASE MIMALLOC_LIBRARY_DEBUG)
+
+IF(MIMALLOC_FOUND)
+  SET(MIMALLOC_LIBRARIES optimized ${MIMALLOC_LIBRARY_RELEASE} debug ${MIMALLOC_LIBRARY_DEBUG})
+  SET(MIMALLOC_INCLUDE_DIRS ${MIMALLOC_INCLUDE_DIR})
+ENDIF(MIMALLOC_FOUND)
+
+MARK_AS_ADVANCED(
+  MIMALLOC_INCLUDE_DIR
+  MIMALLOC_LIBRARIES
+)
+

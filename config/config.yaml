@@ -1,0 +1,17 @@
+kfusion_node:
+  ros__parameters:
+    num_cameras: 3
+    usleep_time: 30000
+    map_size_x: 512
+    map_size_y: 512
+    map_size_z: 256
+    isSync: True
+    isMask: True
+    isClearMap: False
+    recon_threshold: 0.05
+    vis_unknown: True
+    debug_chrono: False
+  
+    # if map size is 512, then voxel_side_length set to 0.01
+    # if map size is 256, then voxel_side_length set to 0.02
+    # vis_unknown set to True, then when isMask is True, the unknown voxel won't be shown

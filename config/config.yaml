@@ -8,7 +8,7 @@ kfusion_node:
     isSync: True
     isMask: False
     isClearMap: False
-    recon_threshold: 0.05
+    recon_threshold: 0.02
     vis_unknown: True
     debug_chrono: False
   

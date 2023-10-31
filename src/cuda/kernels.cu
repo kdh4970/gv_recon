@@ -269,7 +269,7 @@ void DeviceKernel::saveVoxelRaw(boost::shared_ptr<voxelmap::BitVectorVoxelMap> p
 	checkCudaErrors(cudaMemcpy(h_voxelRaw, d_voxelRaw, data_bytes, cudaMemcpyDeviceToHost));
 	
 	// save voxel data to file
-	const char *file_name = "result.raw";
+	const char *file_name = "/home/do/result.raw";
 	FILE *fp;
 	FOPEN(fp, file_name, "wb");
 	fwrite(h_voxelRaw, data_bytes, 1, fp);

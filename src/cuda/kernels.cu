@@ -233,7 +233,7 @@ double DeviceKernel::ReconVoxelWithPreprocess(boost::shared_ptr<voxelmap::BitVec
 		// printf("in kernel cu : call mask version\n");
 		ptrbitVoxmap->ReconstructionWithPreprocess(DeviceDepthArray[0],DeviceDepthArray[1],DeviceDepthArray[2],DeviceYosoArray[0],DeviceYosoArray[1],DeviceYosoArray[2],
 			DeviceIntrInvGVoxArray[0], DeviceIntrInvGVoxArray[1], DeviceIntrInvGVoxArray[2], DeviceExtrInvGVoxArray[0], DeviceExtrInvGVoxArray[1], DeviceExtrInvGVoxArray[2],
-			DepthWidth, DepthHeight,YosoMaskWidth,Scale);
+			DepthWidth, DepthHeight,YosoMaskWidth, Scale);
 		}
 	else{
 		ptrbitVoxmap->ReconstructionWithPreprocess(DeviceDepthArray[0],DeviceDepthArray[1],DeviceDepthArray[2], DeviceIntrInvGVoxArray[0],

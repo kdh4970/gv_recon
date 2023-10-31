@@ -42,6 +42,7 @@ public:
 	//do added
 	double ReconVoxelToDepthtest(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
 	double ReconVoxelWithPreprocess(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
+	void saveVoxelRaw(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
 
 private:
 	int DepthWidth;
@@ -67,5 +68,6 @@ private:
 	gpu_voxels::Matrix4f DeviceExtrInvGVoxArray[3];
 	gpu_voxels::Matrix4f DeviceIntrInvGVoxArray[3];
 	uint16_t YosoMaskHeight, YosoMaskWidth;
+	uchar* d_voxelRaw;
 };
 

@@ -780,6 +780,7 @@ int main(int argc, char* argv[])
       // reconTime+=reconTimeOnce;
       if(node->_isClearMap) reconTimeOnce = dk.ReconVoxelToDepthtest(ptrbitVoxmap);
       else reconTimeOnce = dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
+
       // reconTimeOnce= node->_isClearMap ? dk.ReconVoxelToDepthtest(ptrbitVoxmap): dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
       if(debug_chrono){
         reconTime+=reconTimeOnce;
@@ -800,7 +801,7 @@ int main(int argc, char* argv[])
       }
       else {usleep(usleep_time); gvl->visualizeMap("voxelmap_1");}
       
-      
+      if(iteration==50) dk.saveVoxelRaw(ptrbitVoxmap);
 
       iteration++;
 

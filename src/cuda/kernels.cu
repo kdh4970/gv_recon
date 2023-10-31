@@ -69,7 +69,6 @@ DeviceKernel::DeviceKernel(bool node_isMask, const int inputWidth, const int inp
 			printf("GPU memory address: %p\n", DeviceYosoArray[i]);
 		}
 	}
-	
 
 	// std::cout << "Allocated GPU memory(intr,extr) : " << 9 * sizeof(Eigen::Matrix4f) << std::endl;
 	// std::cout << "Allocated GPU memory(pcl) : " << 3*DepthWidth*DepthHeight*sizeof(Vector3f) + 3*DepthWidth*DepthHeight*sizeof(uint8_t) << std::endl;
@@ -91,6 +90,7 @@ DeviceKernel::~DeviceKernel()
 		cudaFree(DeviceDepthArray[i]);
 		DeviceDepthArray[i]=nullptr;
 	}
+	cudaFree(d_voxelRaw);
 }
 
 double DeviceKernel::toDeviceMemory(const std::vector<float *> inputDepths)
@@ -245,4 +245,38 @@ double DeviceKernel::ReconVoxelWithPreprocess(boost::shared_ptr<voxelmap::BitVec
 	return timecount.count()*1000;
 }
 
-void DeviceKErnel
+/**
+ * @brief Save voxel data to file
+ * 
+ * @param ptrbitVoxmap 
+ */
+void DeviceKernel::saveVoxelRaw(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap)
+{
+	std::cout<<"[Debug] Started >>> Saving Raw File...\n";
+
+	// count num voxels and allocate ddata memory
+	const int numVoxels = ptrbitVoxmap->getDimensions().x * ptrbitVoxmap->getDimensions().y * ptrbitVoxmap->getDimensions().z;
+	cudaMalloc(&d_voxelRaw, sizeof(uchar) * numVoxels);
+	cudaMemset(d_voxelRaw, 0, sizeof(uchar) * numVoxels);
+
+	// launch kernel to get voxel data
+	ptrbitVoxmap->getVoxelRaw(d_voxelRaw);
+	cudaDeviceSynchronize();
+
+	// copy voxel data to host memory
+	const int data_bytes = sizeof(uchar) * numVoxels; // 1byte * voxel num
+	void *h_voxelRaw = new uchar[numVoxels];
+	checkCudaErrors(cudaMemcpy(h_voxelRaw, d_voxelRaw, data_bytes, cudaMemcpyDeviceToHost));
+	
+	// save voxel data to file
+	const char *file_name = "result.raw";
+	FILE *fp;
+	FOPEN(fp, file_name, "wb");
+	fwrite(h_voxelRaw, data_bytes, 1, fp);
+	fflush(fp);
+	fclose(fp);
+
+	delete[] h_voxelRaw;
+	cudaDeviceSynchronize();
+	std::cout<<"[Debug] Finished <<< Saving Raw File.\n";
+}

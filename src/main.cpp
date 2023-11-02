@@ -46,34 +46,6 @@
 
 #include <cstdlib>
 #include <signal.h>
-
-#include <gpu_voxels/GpuVoxels.h>
-#include <gpu_voxels/helpers/common_defines.h>
-
-#include <pcl/point_types.h>
-#include <icl_core_config/Config.h>
-#include <chrono>
-
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
-
-#include <fstream>
-
-#include "rclcpp/rclcpp.hpp"
-#include "rcl_interfaces/msg/set_parameters_result.hpp"
-#include "cv_bridge/cv_bridge.h"
-#include "std_msgs/msg/string.hpp"
-#include "sensor_msgs/msg/image.hpp"
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/point_cloud2_iterator.hpp"
-#include "message_filters/subscriber.h"
-#include "message_filters/time_synchronizer.h"
-#include "message_filters/sync_policies/approximate_time.h"
-#include "message_filters/synchronizer.h"
-#include <functional>
-#include <memory>
-#include <stdint.h>
-
 #include "kernelCall.h"
 #include "SyncedSubNode.h"
 

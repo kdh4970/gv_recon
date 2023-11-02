@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <signal.h>
 
 #include <gpu_voxels/GpuVoxels.h>
 #include <gpu_voxels/helpers/common_defines.h>

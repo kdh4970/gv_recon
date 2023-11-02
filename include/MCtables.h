@@ -32,6 +32,10 @@
 
 // edge table maps 8-bit flag representing which cube vertices are inside
 // the isosurface to 12-bit number indicating which edges are intersected
+
+#ifndef __MC_TABLES_H__
+#define __MC_TABLES_H__
+
 uint edgeTable[256] = {
     0x0,   0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c, 0x80c, 0x905, 0xa0f,
     0xb06, 0xc0a, 0xd03, 0xe09, 0xf00, 0x190, 0x99,  0x393, 0x29a, 0x596, 0x49f,
@@ -336,3 +340,5 @@ uint numVertsTable[256] = {
     12, 15, 9,  12, 12, 15, 15, 6,  9,  12, 6,  3,  6,  9,  9,  6,  9,  12, 6,
     3,  9,  6,  12, 3,  6,  3,  3,  0,
 };
+
+#endif

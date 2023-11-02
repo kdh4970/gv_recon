@@ -70,8 +70,6 @@ if(CUDA_FOUND)
 
   # for call gpu_voxels kernel
   set(kfusion_cuda_srcs
-	    include/sMatrix.h
-	    include/kernelCall.h
 	    src/kernelCall.cu
       )
   cuda_add_library(kfusion-cuda STATIC
@@ -81,9 +79,8 @@ if(CUDA_FOUND)
 
   # for using marching cubes
   set(marching_cubes_srcs
-      include/MCdefines.h
-      include/MCtables.h
       src/marchingCubes/marchingCubes_kernel.cu
+      src/marchingCubes/marchingCubes.cu
       )
   cuda_add_library(marching_cubes-cuda STATIC
               ${marching_cubes_srcs} OPTIONS -O3

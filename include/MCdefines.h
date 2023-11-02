@@ -25,8 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _DEFINES_H_
-#define _DEFINES_H_
+#ifndef _MCDEFINES_H_
+#define _MCDEFINES_H_
 
 typedef unsigned int uint;
 typedef unsigned char uchar;

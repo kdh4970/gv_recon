@@ -48,7 +48,7 @@
 #include <signal.h>
 #include "kernelCall.h"
 #include "SyncedSubNode.h"
-
+#include "marchingCubes/marchingCubes.h"
 //using std::placeholders::_1;
 
 using boost::dynamic_pointer_cast;

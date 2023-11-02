@@ -36,8 +36,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 
-#include "defines.h"
-#include "tables.h"
+#include "MCdefines.h"
+#include "MCtables.h"
 
 // textures containing look-up tables
 cudaTextureObject_t triTex;

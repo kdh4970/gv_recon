@@ -5,7 +5,6 @@ kfusion_node:
     map_size_x: 512
     map_size_y: 512
     map_size_z: 256
-    isSync: True
     isMask: False
     isClearMap: False
     recon_threshold: 0.02

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(gv_recon)
+project(gv_recon LANGUAGES CXX CUDA)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -63,33 +63,46 @@ if (OPENMP_FOUND)
   set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-#######################  CUDA  ###################################
+###################################  CUDA  ###################################
 if(CUDA_FOUND)
   #message("cuda found")
   set(CUDA_PROPAGATE_HOST_FLAGS OFF)
 
+  # for call gpu_voxels kernel
   set(kfusion_cuda_srcs
 	    include/sMatrix.h
-	    include/kernels.h
-	    src/cuda/kernels.cu
+	    include/kernelCall.h
+	    src/kernelCall.cu
       )
-
   cuda_add_library(kfusion-cuda STATIC
               ${kfusion_cuda_srcs} OPTIONS -O3
               )
-
   target_link_libraries(kfusion-cuda)
+
+  # for using marching cubes
+  set(marching_cubes_srcs
+      include/MCdefines.h
+      include/MCtables.h
+      src/marchingCubes/marchingCubes_kernel.cu
+      )
+  cuda_add_library(marching_cubes-cuda STATIC
+              ${marching_cubes_srcs} OPTIONS -O3
+              )
+  target_link_libraries(marching_cubes-cuda)
 endif(CUDA_FOUND)
 
 ##########################################################################
 LIST(APPEND SOURCEFILES
-    src/az_yoso.cpp
+    src/SyncedSubNode.h   
+    src/SyncedSubNode.cpp
+    src/main.cpp
     )
 
 add_executable(az_yoso ${SOURCEFILES})
 
 target_link_libraries(az_yoso
                       kfusion-cuda
+                      marching_cubes-cuda 
                       ${OPENGL_LIBRARIES}
                       ${GLEW_LIBRARIES}
                       ${OpenCV_LIBS}

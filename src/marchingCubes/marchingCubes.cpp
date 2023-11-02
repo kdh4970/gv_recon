@@ -94,7 +94,6 @@
 #include <helper_cuda.h>  // includes cuda.h and cuda_runtime_api.h
 #include <helper_functions.h>
 
-#include "defines.h"
 #include <GL/freeglut.h>
 
 extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts,
@@ -404,8 +403,8 @@ void initMC(int argc, char **argv) {
     gridSizeLog2.x = n;
   }
 
-  if (checkCmdLineFlag(argc, (const char **)argv, "gridx")) {
-    n = getCmdLineArgumentInt(argc, (const char **)argv, "gridx");
+  if (checkCmdLineFlag(argc, (const char **)argv, "gridy")) {
+    n = getCmdLineArgumentInt(argc, (const char **)argv, "gridy");
     gridSizeLog2.y = n;
   }
 

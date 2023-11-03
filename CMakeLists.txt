@@ -33,6 +33,7 @@ find_package(statgrab REQUIRED)
 find_package(PCL 1.10 REQUIRED COMPONENTS common io)
 find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(TBB REQUIRED)
 #find_package(TooN   REQUIRED)
@@ -59,6 +60,7 @@ include_directories(
 
 if (OPENMP_FOUND)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=${OpenMP_CXX_FLAGS}") 
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
@@ -66,7 +68,7 @@ endif()
 ###################################  CUDA  ###################################
 if(CUDA_FOUND)
   #message("cuda found")
-  set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+  set(CUDA_PROPAGATE_HOST_FLAGS ON)
 
   # for call gpu_voxels kernel
   set(kfusion_cuda_srcs
@@ -79,19 +81,25 @@ if(CUDA_FOUND)
 
   # for using marching cubes
   set(marching_cubes_srcs
+      include/marchingCubes_kernel.h
       src/marchingCubes/marchingCubes_kernel.cu
-      src/marchingCubes/marchingCubes.cu
+      # src/marchingCubes/marchingCubes.cu
+      
       )
+
+
   cuda_add_library(marching_cubes-cuda STATIC
               ${marching_cubes_srcs} OPTIONS -O3
               )
   target_link_libraries(marching_cubes-cuda)
+  
 endif(CUDA_FOUND)
 
 ##########################################################################
 LIST(APPEND SOURCEFILES
     src/SyncedSubNode.h   
     src/SyncedSubNode.cpp
+    # include/glDefines.h
     src/main.cpp
     )
 
@@ -99,7 +107,7 @@ add_executable(az_yoso ${SOURCEFILES})
 
 target_link_libraries(az_yoso
                       kfusion-cuda
-                      marching_cubes-cuda 
+                      marching_cubes-cuda
                       ${OPENGL_LIBRARIES}
                       ${GLEW_LIBRARIES}
                       ${OpenCV_LIBS}
@@ -108,6 +116,8 @@ target_link_libraries(az_yoso
                       ${PCL_LIBRARIES}
                       ${icl_core_LIBRARIES}
                       ${gpu_voxels_LIBRARIES}
+                      ${GLUT_LIBRARIES}
+                      ${OpenGL_LIBRARIES}
                       )
 
 ament_target_dependencies(az_yoso

@@ -10,8 +10,6 @@
 #include <thrust/binary_search.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
-#include "pcl/point_cloud.h"
-#include <pcl/point_types.h>
 
 #include "sMatrix.h"
 

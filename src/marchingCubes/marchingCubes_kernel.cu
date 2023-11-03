@@ -25,15 +25,108 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MARCHING_CUBES_KERNEL_CU_
-#define _MARCHING_CUBES_KERNEL_CU_
+// #pragma once
+// #ifndef _MARCHING_CUBES_KERNEL_CUH_
+// #define _MARCHING_CUBES_KERNEL_CUH_
 
-#include "marchingCubes_kernel.cuh"
+#include "marchingCubes_kernel.h"
 
-namespace MC_cuda
-{
+  // ////////////////////////////////////
+  // // declarations of host functions //
+  // ////////////////////////////////////
 
-  void allocateTextures(uint **d_edgeTable, uint **d_triTable,
+  // extern "C" void allocateTextures(uint **d_edgeTable, uint **d_triTable, uint **d_numVertsTable);
+
+  // extern "C" void createVolumeTexture(uchar *d_volume, size_t buffSize);
+
+  // extern "C" void destroyAllTextureObjects();
+
+  // extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts, uint *voxelOccupied, uchar *volume,
+  //                           uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels,
+  //                           float3 voxelSize, float isoValue);
+
+  // extern "C" void launch_compactVoxels(dim3 grid, dim3 threads, uint *compactedVoxelArray, uint *voxelOccupied,
+  //                           uint *voxelOccupiedScan, uint numVoxels);
+
+  // extern "C" void launch_generateTriangles(
+  //     dim3 grid, dim3 threads, float4 *pos, float4 *norm,
+  //     uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize,
+  //     uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue,
+  //     uint activeVoxels, uint maxVerts);
+
+  // extern "C" void launch_generateTriangles2(
+  //     dim3 grid, dim3 threads, float4 *pos, float4 *norm,
+  //     uint *compactedVoxelArray, uint *numVertsScanned, uchar *volume,
+  //     uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize,
+  //     float isoValue, uint activeVoxels, uint maxVerts);
+
+  // extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input, unsigned int numElements);
+
+  // //////////////////////////////////////
+  // // declarations of device functions //
+  // //////////////////////////////////////
+
+  // // an interesting field function
+  // __device__ __forceinline__ 
+  // float tangle(float x, float y, float z);
+
+  // // evaluate field function at point
+  // __device__ __forceinline__ 
+  // float fieldFunc(float3 p);
+
+  // // evaluate field function at a point
+  // // returns value and gradient in float4
+  // __device__ __forceinline__ 
+  // float4 fieldFunc4(float3 p);
+
+  // // sample volume data set at a point
+  // __device__  __forceinline__ 
+  // float sampleVolume(cudaTextureObject_t _volumeTex, uchar *data, uint3 p, uint3 gridSize);
+
+  // // compute position in 3d grid from 1d index
+  // // only works for power of 2 sizes
+  // __device__  __forceinline__ 
+  // uint3 calcGridPos(uint i, uint3 gridSizeShift, uint3 gridSizeMask);
+
+  // // classify voxel based on number of vertices it will generate
+  // // one thread per voxel
+  // __global__ void classifyVoxel(uint *voxelVerts, uint *voxelOccupied, uchar *volume, uint3 gridSize,
+  //                               uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels, float3 voxelSize,
+  //                               float isoValue, cudaTextureObject_t _numVertsTex, cudaTextureObject_t _volumeTex);
+
+  // // compact voxel array
+  // __global__ void compactVoxels(uint *compactedVoxelArray, uint *voxelOccupied,
+  //                               uint *voxelOccupiedScan, uint numVoxels);
+
+  // // compute interpolated vertex along an edge
+  // __device__ float3 vertexInterp(float isolevel, float3 p0, float3 p1, float f0, float f1);
+
+  // // compute interpolated vertex position and normal along an edge
+  // __device__ void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, float3 &p, float3 &n);
+
+  // // calculate triangle normal
+  // __device__ float3 calcNormal(float3 *v0, float3 *v1, float3 *v2);
+
+  // // generate triangles for each voxel using marching cubes
+  // // interpolates normals from field function
+  // __global__ void generateTriangles(
+  //     float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize, 
+  //     uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue, uint activeVoxels, 
+  //     uint maxVerts, cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex);
+
+  // // version that calculates flat surface normal for each triangle
+  // __global__ void generateTriangles2(
+  //     float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
+  //     uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask,
+  //     float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
+  //     cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex,
+  //     cudaTextureObject_t _volumeTex);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+  extern "C" void allocateTextures(uint **d_edgeTable, uint **d_triTable,
                                   uint **d_numVertsTable) {
     checkCudaErrors(cudaMalloc((void **)d_edgeTable, 256 * sizeof(uint)));
     checkCudaErrors(cudaMemcpy((void *)*d_edgeTable, (void *)edgeTable,
@@ -61,7 +154,7 @@ namespace MC_cuda
     texDescr.addressMode[0] = cudaAddressModeClamp;
     texDescr.readMode = cudaReadModeElementType;
 
-    checkCudaErrors(cudaCreateTextureObject(&triTex, &texRes, &texDescr, NULL));
+    checkCudaErrors(cudaCreateTextureObject(&_triTex, &texRes, &texDescr, NULL));
 
     checkCudaErrors(cudaMalloc((void **)d_numVertsTable, 256 * sizeof(uint)));
     checkCudaErrors(cudaMemcpy((void *)*d_numVertsTable, (void *)numVertsTable,
@@ -82,10 +175,10 @@ namespace MC_cuda
     texDescr.readMode = cudaReadModeElementType;
 
     checkCudaErrors(
-        cudaCreateTextureObject(&numVertsTex, &texRes, &texDescr, NULL));
+        cudaCreateTextureObject(&_numVertsTex, &texRes, &texDescr, NULL));
   }
 
-  void createVolumeTexture(uchar *d_volume, size_t buffSize) {
+  extern "C" void createVolumeTexture(uchar *d_volume, size_t buffSize) {
     cudaResourceDesc texRes;
     memset(&texRes, 0, sizeof(cudaResourceDesc));
 
@@ -104,16 +197,16 @@ namespace MC_cuda
     texDescr.readMode = cudaReadModeNormalizedFloat;
 
     checkCudaErrors(
-        cudaCreateTextureObject(&volumeTex, &texRes, &texDescr, NULL));
+        cudaCreateTextureObject(&_volumeTex, &texRes, &texDescr, NULL));
   }
 
-  void destroyAllTextureObjects() {
-    checkCudaErrors(cudaDestroyTextureObject(triTex));
-    checkCudaErrors(cudaDestroyTextureObject(numVertsTex));
-    checkCudaErrors(cudaDestroyTextureObject(volumeTex));
+  extern "C" void destroyAllTextureObjects() {
+    checkCudaErrors(cudaDestroyTextureObject(_triTex));
+    checkCudaErrors(cudaDestroyTextureObject(_numVertsTex));
+    checkCudaErrors(cudaDestroyTextureObject(_volumeTex));
   }
 
-  void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts,
+  extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts,
                                       uint *voxelOccupied, uchar *volume,
                                       uint3 gridSize, uint3 gridSizeShift,
                                       uint3 gridSizeMask, uint numVoxels,
@@ -121,11 +214,11 @@ namespace MC_cuda
     // calculate number of vertices need per voxel
     classifyVoxel<<<grid, threads>>>(voxelVerts, voxelOccupied, volume, gridSize,
                                     gridSizeShift, gridSizeMask, numVoxels,
-                                    voxelSize, isoValue, numVertsTex, volumeTex);
+                                    voxelSize, isoValue, _numVertsTex, _volumeTex);
     getLastCudaError("classifyVoxel failed");
   }
 
-  void launch_compactVoxels(dim3 grid, dim3 threads,
+  extern "C" void launch_compactVoxels(dim3 grid, dim3 threads,
                                       uint *compactedVoxelArray,
                                       uint *voxelOccupied,
                                       uint *voxelOccupiedScan, uint numVoxels) {
@@ -134,19 +227,19 @@ namespace MC_cuda
     getLastCudaError("compactVoxels failed");
   }
 
-  void launch_generateTriangles(
+  extern "C" void launch_generateTriangles(
       dim3 grid, dim3 threads, float4 *pos, float4 *norm,
       uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize,
       uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue,
       uint activeVoxels, uint maxVerts) {
     generateTriangles<<<grid, NTHREADS>>>(
         pos, norm, compactedVoxelArray, numVertsScanned, gridSize, gridSizeShift,
-        gridSizeMask, voxelSize, isoValue, activeVoxels, maxVerts, triTex,
-        numVertsTex);
+        gridSizeMask, voxelSize, isoValue, activeVoxels, maxVerts, _triTex,
+        _numVertsTex);
     getLastCudaError("generateTriangles failed");
   }
 
-  void launch_generateTriangles2(
+  extern "C" void launch_generateTriangles2(
       dim3 grid, dim3 threads, float4 *pos, float4 *norm,
       uint *compactedVoxelArray, uint *numVertsScanned, uchar *volume,
       uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize,
@@ -154,11 +247,11 @@ namespace MC_cuda
     generateTriangles2<<<grid, NTHREADS>>>(
         pos, norm, compactedVoxelArray, numVertsScanned, volume, gridSize,
         gridSizeShift, gridSizeMask, voxelSize, isoValue, activeVoxels, maxVerts,
-        triTex, numVertsTex, volumeTex);
+        _triTex, _numVertsTex, _volumeTex);
     getLastCudaError("generateTriangles2 failed");
   }
 
-  void ThrustScanWrapper(unsigned int *output, unsigned int *input,
+  extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input,
                                     unsigned int numElements) {
     thrust::exclusive_scan(thrust::device_ptr<unsigned int>(input),
                           thrust::device_ptr<unsigned int>(input + numElements),
@@ -189,14 +282,14 @@ namespace MC_cuda
   }
 
   // sample volume data set at a point
-  __device__ float sampleVolume(cudaTextureObject_t volumeTex, uchar *data,
+  __device__ float sampleVolume(cudaTextureObject_t _volumeTex, uchar *data,
                                 uint3 p, uint3 gridSize) {
     p.x = min(p.x, gridSize.x - 1);
     p.y = min(p.y, gridSize.y - 1);
     p.z = min(p.z, gridSize.z - 1);
     uint i = (p.z * gridSize.x * gridSize.y) + (p.y * gridSize.x) + p.x;
     //    return (float) data[i] / 255.0f;
-    return tex1Dfetch<float>(volumeTex, i);
+    return tex1Dfetch<float>(_volumeTex, i);
   }
 
   // compute position in 3d grid from 1d index
@@ -215,8 +308,8 @@ namespace MC_cuda
                                 uchar *volume, uint3 gridSize,
                                 uint3 gridSizeShift, uint3 gridSizeMask,
                                 uint numVoxels, float3 voxelSize, float isoValue,
-                                cudaTextureObject_t numVertsTex,
-                                cudaTextureObject_t volumeTex) {
+                                cudaTextureObject_t _numVertsTex,
+                                cudaTextureObject_t _volumeTex) {
     uint blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
     uint i = __mul24(blockId, blockDim.x) + threadIdx.x;
 
@@ -225,21 +318,21 @@ namespace MC_cuda
   // read field values at neighbouring grid vertices
   #if SAMPLE_VOLUME
     float field[8];
-    field[0] = sampleVolume(volumeTex, volume, gridPos, gridSize);
+    field[0] = sampleVolume(_volumeTex, volume, gridPos, gridSize);
     field[1] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 0, 0), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 0, 0), gridSize);
     field[2] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 1, 0), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 1, 0), gridSize);
     field[3] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 1, 0), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 1, 0), gridSize);
     field[4] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 0, 1), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 0, 1), gridSize);
     field[5] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 0, 1), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 0, 1), gridSize);
     field[6] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 1, 1), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 1, 1), gridSize);
     field[7] =
-        sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 1, 1), gridSize);
+        sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 1, 1), gridSize);
   #else
     float3 p;
     p.x = -1.0f + (gridPos.x * voxelSize.x);
@@ -269,7 +362,7 @@ namespace MC_cuda
     cubeindex += uint(field[7] < isoValue) * 128;
 
     // read number of vertices from texture
-    uint numVerts = tex1Dfetch<uint>(numVertsTex, cubeindex);
+    uint numVerts = tex1Dfetch<uint>(_numVertsTex, cubeindex);
 
     if (i < numVoxels) {
       voxelVerts[i] = numVerts;
@@ -312,7 +405,7 @@ namespace MC_cuda
       float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
       uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize,
       float isoValue, uint activeVoxels, uint maxVerts,
-      cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex) {
+      cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex) {
     uint blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
     uint i = __mul24(blockId, blockDim.x) + threadIdx.x;
 
@@ -446,10 +539,10 @@ namespace MC_cuda
   #endif
 
     // output triangle vertices
-    uint numVerts = tex1Dfetch<uint>(numVertsTex, cubeindex);
+    uint numVerts = tex1Dfetch<uint>(_numVertsTex, cubeindex);
 
     for (int i = 0; i < numVerts; i++) {
-      uint edge = tex1Dfetch<uint>(triTex, cubeindex * 16 + i);
+      uint edge = tex1Dfetch<uint>(_triTex, cubeindex * 16 + i);
 
       uint index = numVertsScanned[voxel] + i;
 
@@ -480,8 +573,8 @@ namespace MC_cuda
       float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
       uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask,
       float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
-      cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex,
-      cudaTextureObject_t volumeTex) {
+      cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex,
+      cudaTextureObject_t _volumeTex) {
   uint blockId = __mul24(blockIdx.y, gridDim.x) + blockIdx.x;
   uint i = __mul24(blockId, blockDim.x) + threadIdx.x;
 
@@ -516,21 +609,21 @@ namespace MC_cuda
 
 #if SAMPLE_VOLUME
   float field[8];
-  field[0] = sampleVolume(volumeTex, volume, gridPos, gridSize);
+  field[0] = sampleVolume(_volumeTex, volume, gridPos, gridSize);
   field[1] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 0, 0), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 0, 0), gridSize);
   field[2] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 1, 0), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 1, 0), gridSize);
   field[3] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 1, 0), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 1, 0), gridSize);
   field[4] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 0, 1), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 0, 1), gridSize);
   field[5] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 0, 1), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 0, 1), gridSize);
   field[6] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(1, 1, 1), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(1, 1, 1), gridSize);
   field[7] =
-      sampleVolume(volumeTex, volume, gridPos + make_uint3(0, 1, 1), gridSize);
+      sampleVolume(_volumeTex, volume, gridPos + make_uint3(0, 1, 1), gridSize);
 #else
   // evaluate field values
   float field[8];
@@ -607,28 +700,28 @@ namespace MC_cuda
 #endif
 
   // output triangle vertices
-  uint numVerts = tex1Dfetch<uint>(numVertsTex, cubeindex);
+  uint numVerts = tex1Dfetch<uint>(_numVertsTex, cubeindex);
 
   for (int i = 0; i < numVerts; i += 3) {
     uint index = numVertsScanned[voxel] + i;
 
     float3 *v[3];
     uint edge;
-    edge = tex1Dfetch<uint>(triTex, (cubeindex * 16) + i);
+    edge = tex1Dfetch<uint>(_triTex, (cubeindex * 16) + i);
 #if USE_SHARED
     v[0] = &vertlist[(edge * NTHREADS) + threadIdx.x];
 #else
     v[0] = &vertlist[edge];
 #endif
 
-    edge = tex1Dfetch<uint>(triTex, (cubeindex * 16) + i + 1);
+    edge = tex1Dfetch<uint>(_triTex, (cubeindex * 16) + i + 1);
 #if USE_SHARED
     v[1] = &vertlist[(edge * NTHREADS) + threadIdx.x];
 #else
     v[1] = &vertlist[edge];
 #endif
 
-    edge = tex1Dfetch<uint>(triTex, (cubeindex * 16) + i + 2);
+    edge = tex1Dfetch<uint>(_triTex, (cubeindex * 16) + i + 2);
 #if USE_SHARED
     v[2] = &vertlist[(edge * NTHREADS) + threadIdx.x];
 #else
@@ -650,6 +743,3 @@ namespace MC_cuda
     }
   }
 }
-
-}
-#endif

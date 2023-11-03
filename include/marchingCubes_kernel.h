@@ -24,9 +24,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _MARCHING_CUBES_KERNEL_CUH_
-#define _MARCHING_CUBES_KERNEL_CUH_
+#pragma once
+// #ifndef _MARCHING_CUBES_KERNEL_CUH_
+// #define _MARCHING_CUBES_KERNEL_CUH_
 
 #include <stdio.h>
 #include <string.h>
@@ -39,45 +39,45 @@
 #include "MCdefines.h"
 #include "MCtables.h"
 
-namespace MC_cuda
-{
+    
+
   // textures containing look-up tables
-  cudaTextureObject_t triTex;
-  cudaTextureObject_t numVertsTex;
+  cudaTextureObject_t _triTex;
+  cudaTextureObject_t _numVertsTex;
 
   // volume data
-  cudaTextureObject_t volumeTex;
+  cudaTextureObject_t _volumeTex;
 
   ////////////////////////////////////
   // declarations of host functions //
   ////////////////////////////////////
 
-  void allocateTextures(uint **d_edgeTable, uint **d_triTable, uint **d_numVertsTable);
+  extern "C" void allocateTextures(uint **d_edgeTable, uint **d_triTable, uint **d_numVertsTable);
 
-  void createVolumeTexture(uchar *d_volume, size_t buffSize);
+  extern "C" void createVolumeTexture(uchar *d_volume, size_t buffSize);
 
-  void destroyAllTextureObjects();
+  extern "C" void destroyAllTextureObjects();
 
-  void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts, uint *voxelOccupied, uchar *volume,
+  extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts, uint *voxelOccupied, uchar *volume,
                             uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels,
                             float3 voxelSize, float isoValue);
 
-  void launch_compactVoxels(dim3 grid, dim3 threads, uint *compactedVoxelArray, uint *voxelOccupied,
+  extern "C" void launch_compactVoxels(dim3 grid, dim3 threads, uint *compactedVoxelArray, uint *voxelOccupied,
                             uint *voxelOccupiedScan, uint numVoxels);
 
-  void launch_generateTriangles(
+  extern "C" void launch_generateTriangles(
       dim3 grid, dim3 threads, float4 *pos, float4 *norm,
       uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize,
       uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue,
       uint activeVoxels, uint maxVerts);
 
-  void launch_generateTriangles2(
+  extern "C" void launch_generateTriangles2(
       dim3 grid, dim3 threads, float4 *pos, float4 *norm,
       uint *compactedVoxelArray, uint *numVertsScanned, uchar *volume,
       uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize,
       float isoValue, uint activeVoxels, uint maxVerts);
 
-  void ThrustScanWrapper(unsigned int *output, unsigned int *input, unsigned int numElements);
+  extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input, unsigned int numElements);
 
   //////////////////////////////////////
   // declarations of device functions //
@@ -98,7 +98,7 @@ namespace MC_cuda
 
   // sample volume data set at a point
   __device__  __forceinline__ 
-  float sampleVolume(cudaTextureObject_t volumeTex, uchar *data, uint3 p, uint3 gridSize);
+  float sampleVolume(cudaTextureObject_t _volumeTex, uchar *data, uint3 p, uint3 gridSize);
 
   // compute position in 3d grid from 1d index
   // only works for power of 2 sizes
@@ -109,7 +109,7 @@ namespace MC_cuda
   // one thread per voxel
   __global__ void classifyVoxel(uint *voxelVerts, uint *voxelOccupied, uchar *volume, uint3 gridSize,
                                 uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels, float3 voxelSize,
-                                float isoValue, cudaTextureObject_t numVertsTex, cudaTextureObject_t volumeTex);
+                                float isoValue, cudaTextureObject_t _numVertsTex, cudaTextureObject_t _volumeTex);
 
   // compact voxel array
   __global__ void compactVoxels(uint *compactedVoxelArray, uint *voxelOccupied,
@@ -129,14 +129,13 @@ namespace MC_cuda
   __global__ void generateTriangles(
       float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize, 
       uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue, uint activeVoxels, 
-      uint maxVerts, cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex);
+      uint maxVerts, cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex);
 
   // version that calculates flat surface normal for each triangle
   __global__ void generateTriangles2(
       float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
       uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask,
       float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
-      cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex,
-      cudaTextureObject_t volumeTex);
-}
-#endif
+      cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex,
+      cudaTextureObject_t _volumeTex);
+

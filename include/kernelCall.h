@@ -29,7 +29,6 @@ public:
 				gpu_voxels::Matrix4f ExtrInvGVox[3]);
 	~DeviceKernel();
 
-
 	double toDeviceMemory(const std::vector<float *> inputDepths);
 	void toDeviceMemoryYosoArray(float* const inputDepths[3], uint8_t* inputMasks[3], uint16_t mask_width, uint16_t mask_height);
 	double fromDevicePointToHostMem(std::vector<Vector3f*>* outputPointCloud);
@@ -41,6 +40,7 @@ public:
 	double ReconVoxelToDepthtest(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
 	double ReconVoxelWithPreprocess(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
 	void saveVoxelRaw(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap);
+	// uchar* d_voxelRaw;
 
 private:
 	int DepthWidth;
@@ -66,6 +66,6 @@ private:
 	gpu_voxels::Matrix4f DeviceExtrInvGVoxArray[3];
 	gpu_voxels::Matrix4f DeviceIntrInvGVoxArray[3];
 	uint16_t YosoMaskHeight, YosoMaskWidth;
-	uchar* d_voxelRaw;
+	
 };
 

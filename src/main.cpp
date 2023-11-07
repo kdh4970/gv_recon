@@ -1,7 +1,8 @@
 #include <cstdlib>
 #include <signal.h>
 #include <stdlib.h>
-
+#include <thread>
+#include <mutex>
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
@@ -14,29 +15,28 @@
 //using std::placeholders::_1;
 #include <helper_gl.h>
 
+////////////////////////////////////
+// Marching Cubes Variables Setup //
+////////////////////////////////////
 
-// /////////////////////////////////////////////////////////////////////////
-// // for marching cubes //
-// /////////////////////////////////////////////////////////////////////////
 #define MAX_EPSILON_ERROR 5.0f
 #define REFRESH_DELAY 10  // ms
 #define EPSILON 5.0f
 #define THRESHOLD 0.30f
 
-const char *volumeFilename = "Bucky.raw";
 // constants
 const unsigned int window_width = 512;
 const unsigned int window_height = 512;
 
 // grid size parameters
-uint3 gridSizeLog2 = make_uint3(5, 5, 5);
-uint3 gridSizeShift;
-uint3 gridSize;
-uint3 gridSizeMask;
+uint3 gridSizeLog2 = make_uint3(9, 9, 9);
+uint3 gridSizeShift = make_uint3(0, gridSizeLog2.x, gridSizeLog2.x + gridSizeLog2.y);
+uint3 gridSize = make_uint3(1 << gridSizeLog2.x, 1 << gridSizeLog2.y, 1 << gridSizeLog2.z);
+uint3 gridSizeMask = make_uint3(gridSize.x - 1, gridSize.y - 1, gridSize.z - 1);
 
-float3 voxelSize;
-uint numVoxels = 0;
-uint maxVerts = 0;
+float3 voxelSize = make_float3(2.0f / gridSize.x, 2.0f / gridSize.y, 2.0f / gridSize.z);
+uint numVoxels = gridSize.x * gridSize.y * gridSize.z;
+uint maxVerts = gridSize.x * gridSize.y * 100;
 uint activeVoxels = 0;
 uint totalVerts = 0;
 
@@ -61,7 +61,6 @@ struct cudaGraphicsResource *cuda_posvbo_resource,
 
 float4 *d_pos = 0, *d_normal = 0;
 
-uchar *d_volume = 0;
 uint *d_voxelVerts = 0;
 uint *d_voxelVertsScan = 0;
 uint *d_voxelOccupied = 0;
@@ -85,14 +84,11 @@ bool animate = true;
 bool lighting = true;
 bool render = true;
 bool compute = true;
-/////////////////////////////////////////////////////////////////////////
-
 
 
 ///////////////////////////////////////
 // forward declarations of GL and MC //
 ///////////////////////////////////////
-template <class T>
 void renderIsosurface();
 void cleanup();
 void initMC(int argc, char **argv);
@@ -104,7 +100,6 @@ void display();
 void keyboard(unsigned char key, int /*x*/, int /*y*/);
 void mouse(int button, int state, int x, int y);
 void motion(int x, int y);
-void idle();
 void reshape(int w, int h);
 void mainMenu(int i);
 void animation();
@@ -112,10 +107,12 @@ void timerEvent(int value);
 bool initGL(int *argc, char **argv);
 void initMenus();
 void computeFPS();
-
-uchar *loadRawFile(char *filename, int size);
 GLuint compileASMShader(GLenum program_type, const char *code);
 
+
+/////////////////////////////////////
+// ROS2 gpu_voxels Variables Setup //
+/////////////////////////////////////
 
 using boost::dynamic_pointer_cast;
 using boost::shared_ptr;
@@ -146,11 +143,14 @@ const int depth_height = DepthHeight[AzureMode];
 // replace vector to c array
 float* inputDepths[3] {nullptr};
 uint8_t* inputMasks[3] {nullptr};
-
-bool cam0_show, cam1_show, cam2_show;
 uint16_t mask_width=640;
 uint16_t mask_height=360;
 shared_ptr<GpuVoxels> gvl;
+
+// Shared Variable for DeviceKernel and marchingcubes
+std::mutex mtx;
+uchar* d_voxelRaw;
+bool isValid = false;
 
 
 void ctrlchandler(int)
@@ -172,37 +172,24 @@ void killhandler(int)
   exit(EXIT_SUCCESS);
 }
 
-int main(int argc, char** argv)
+void getVoxelData(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap, const int numVoxels)
 {
-  
-  for(int i{0};i<3;i++)
-  {
-    inputDepths[i] = new float[depth_width * depth_height];
-    std::cout << "In Main : " << &inputDepths[i] << std::endl;
-    inputMasks[i] = new uint8_t[mask_width * mask_height];
-  }
+  mtx.lock();
+	cudaMemset(d_voxelRaw, 0, sizeof(uchar) * numVoxels);
+	// launch kernel to get voxel data
+	ptrbitVoxmap->getVoxelRaw(d_voxelRaw);
+	cudaDeviceSynchronize();
+  isValid = true;
+  mtx.unlock();
+}
 
+
+void run_ros2_with_gpuVoxels()
+{
   // Initialize ROS
-  printf("Program Start.\n");
-  rclcpp::init(argc, argv);
   rclcpp::executors::MultiThreadedExecutor executor;
   auto node = std::make_shared<SyncedSubNode>(inputDepths, inputMasks, depth_width, depth_height ,mask_width, mask_height);
   executor.add_node(node);
-
-  ////////////////////
-  // cuda test code //
-  ////////////////////
-
-  int h_data = 1;
-  int* d_data;    
-  cudaMalloc((void**)&d_data, sizeof(int));
-  cudaMemcpy(d_data, &h_data, sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(&h_data, d_data, sizeof(int), cudaMemcpyDeviceToHost);
-
-  printf("[CUDA test] Host-Device data transfer : %s\n", h_data==1 ? "PASS" : "FAIL"); 
-  cudaFree(d_data);
-
-
 
   // Get Parameter
   const int numofcamera=node->_num_cameras;
@@ -216,6 +203,21 @@ int main(int argc, char** argv)
     for(int i{0};i<3;i++) {delete inputMasks[i];} 
   }
 
+  // Set Intrinsic
+  std::vector<float4> ks;
+  if(AzureMode == AzureDepthMode(RGB_R1536p)){
+    ks = {make_float4(974.333f, 973.879f, 1019.83f, 782.927f),
+          make_float4(974.243f, 974.095f, 1021.18f, 771.734f),
+          make_float4(971.426f, 971.43f, 1023.2f, 776.102f)
+          };
+  }
+  else if(AzureMode == AzureDepthMode(RGB_720)){
+    ks = {make_float4(608.958f, 608.674f, 637.205f, 369.142f),
+          make_float4(608.902f, 608.809f, 638.053f, 362.146f),
+          make_float4(607.141f, 607.143f, 639.314f, 364.876f)
+          };
+  }
+
   // Read Extrinsic File
   std::ifstream readExtrinsics;
   std::string line2, stringBuffer2;
@@ -225,16 +227,8 @@ int main(int argc, char** argv)
   std::vector<gpu_voxels::Matrix4f> gpuvox_extrinsic;
   gpu_voxels::Matrix4f gpuvox_ExtrArr[3];
   std::vector<float> ExtrinsicsList;
-  std::ofstream writeFile;
-  std::vector<std::vector<double>> timeMeasureTable;
   
-  if(debug_chrono){
-    timeMeasureTable.resize(6);
-    for (int t = 0; t < 6; t++)
-    {
-      timeMeasureTable[t].resize(1000);
-    }
-  }
+  
   gpu_voxels::Matrix4f tempG;
 
   readExtrinsics.open("/home/do/ros2_ws/src/gv_recon/ExtrinsicFile.txt");
@@ -272,6 +266,7 @@ int main(int argc, char** argv)
     gpuvox_ExtrArr[i] = tempG;
   }
 
+
   printf("============================== Extrinsic ===============================\n");
   for(int i{0};i<3;i++){std::cout<< gpuvox_ExtrArr[i] << std::endl;}
   printf("========================================================================\n");
@@ -292,39 +287,74 @@ int main(int argc, char** argv)
 
   // Generate a GPU-Voxels instance:
   gvl = gpu_voxels::GpuVoxels::getInstance();
-
   gvl->initialize(map_size_x, map_size_y, map_size_z, voxel_side_length);
+  gvl->addMap(MT_BITVECTOR_VOXELMAP, "voxelmap_1");
   
-  // ks  fx fy cx cy
+  boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap(gvl->getMap("voxelmap_1")->as<voxelmap::BitVectorVoxelMap>());
+  std::cout << "[DEBUG] ptrbitVoxmap's m_dev_data (address) : " << ptrbitVoxmap->getVoidDeviceDataPtr() << std::endl;
+  
+   // update kernerl parameter and set constant memory
+  ptrbitVoxmap->updateReconThresh(node->_recon_threshold);
+  ptrbitVoxmap->updateVisUnknown(node->_vis_unknown);
+  node->_ptrBitVoxMap = ptrbitVoxmap;
+  ptrbitVoxmap->setConstMemory(depth_width, depth_height,mask_width,static_cast<float>(mask_width) / depth_width);
+  const int numVoxels = ptrbitVoxmap->getDimensions().x * ptrbitVoxmap->getDimensions().y * ptrbitVoxmap->getDimensions().z;
+	
+  mtx.lock();
+  cudaMalloc(&d_voxelRaw, sizeof(uchar) * numVoxels);
+  mtx.unlock();
 
-  //std::vector<float4> ks = {make_float4(1108.512f, 1108.512f, 640.0f, 360.0f),
-  //                          make_float4(1108.512f, 1108.512f, 640.0f, 360.0f),
-  //                          make_float4(1108.512f, 1108.512f, 640.0f, 360.0f)};
-  std::vector<float4> ks;
-  if(AzureMode == AzureDepthMode(RGB_R1536p)){
-    ks = {make_float4(974.333f, 973.879f, 1019.83f, 782.927f),
-          make_float4(974.243f, 974.095f, 1021.18f, 771.734f),
-          make_float4(971.426f, 971.43f, 1023.2f, 776.102f)
-          };
-  }
-  else if(AzureMode == AzureDepthMode(RGB_720)){
-    ks = {make_float4(608.958f, 608.674f, 637.205f, 369.142f),
-          make_float4(608.902f, 608.809f, 638.053f, 362.146f),
-          make_float4(607.141f, 607.143f, 639.314f, 364.876f)
-          };
+
+  // Create device kernel for call gpu_voxels kernel function 
+  DeviceKernel dk(node->_isMask,depth_width, depth_height, numofcamera, ks, extrinsicInv, gpuvox_ExtrArr);
+  size_t iteration = 0;
+  
+  LOGGING_INFO(Gpu_voxels, "waiting to start visualizing maps" << endl);
+  // Reconstrction main loop
+  while (rclcpp::ok())
+  {
+    // read parameter reconfigure
+    usleep_time=node->_usleep_time;
+    executor.spin_once();
+    if(node->_data_received)
+    {
+      node->_data_received = false;
+      std::cout << "[DEBUG] Iteration =========> " << iteration << std::endl;
+      dk.toDeviceMemoryYosoArray(inputDepths,inputMasks,mask_width,mask_height);
+      float reconTimeOnce{0};
+      if(node->_isClearMap) 
+      {
+        ptrbitVoxmap->clearMap();
+        reconTimeOnce = dk.ReconVoxelToDepthtest(ptrbitVoxmap);
+      }
+      else reconTimeOnce = dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
+
+      gvl->visualizeMap("voxelmap_1");
+
+      getVoxelData(ptrbitVoxmap, numVoxels);
+      usleep(usleep_time);
+      iteration++;
+    }
   }
 
-  /*
-  //////////////////////////
-  // Marching Cubes setup //
-  //////////////////////////
-  setenv("DISPLAY", ":0", 0);
-  // First initialize OpenGL context, so we can properly set the GL for CUDA.
-  // This is necessary in order to achieve optimal performance with OpenGL/CUDA
-  // interop.
+  for (int i = 0; i < numofcamera; i++) {
+    delete[] inputDepths[i];
+    delete[] inputMasks[i];
+    inputDepths[i] = nullptr;
+    inputMasks[i] = nullptr;
+  }
+}
+
+void run_glut_with_marchingCubes(int argc, char** argv)
+{
+  printf("grid: %d x %d x %d = %d voxels\n", gridSize.x, gridSize.y, gridSize.z, numVoxels);
+  printf("max verts = %d\n", maxVerts);
+////////////////
+// GLUT Setup //
+////////////////
+
   if (false == initGL(&argc, argv)) {
-    std::cout<<"initGL failed\n";
-    exit(EXIT_FAILURE);
+    return;
   }
   glutDisplayFunc(display);
   glutKeyboardFunc(keyboard);
@@ -333,232 +363,14 @@ int main(int argc, char** argv)
   glutReshapeFunc(reshape);
   glutTimerFunc(REFRESH_DELAY, timerEvent, 0);
   initMenus();
-  initMC(argc, argv);
   sdkCreateTimer(&timer);
-  // start rendering mainloop
-  //glutMainLoop();
-  std::cout<< "[DEBUG] : MC init finished!" << std::endl;
-  */
 
-  // Create device kernel for call gpu_voxels kernel function 
-  DeviceKernel dk(node->_isMask,depth_width, depth_height, numofcamera, ks, extrinsicInv, gpuvox_ExtrArr);
-
-  gvl->addMap(MT_BITVECTOR_VOXELMAP, "voxelmap_1");
-  boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap(gvl->getMap("voxelmap_1")->as<voxelmap::BitVectorVoxelMap>());
-  std::cout << "[DEBUG] ptrbitVoxmap's m_dev_data (address) : " << ptrbitVoxmap->getVoidDeviceDataPtr() << std::endl;
-  
-  // update kernerl parameter and set constant memory
-  ptrbitVoxmap->updateReconThresh(node->_recon_threshold);
-  ptrbitVoxmap->updateVisUnknown(node->_vis_unknown);
-  node->_ptrBitVoxMap = ptrbitVoxmap;
-  ptrbitVoxmap->setConstMemory(depth_width, depth_height,mask_width,static_cast<float>(mask_width) / depth_width);
-
-  
-  size_t iteration = 0;
-  // double toDeviceMem, genPointCloud, reconTime, visualTime, transformTime, copyTime, generatemsgTime = 0.0;
-  double copyTime, genPointCloud, reconTime,callbackTime,visualTime,syncTime = 0.0;
-
-  LOGGING_INFO(Gpu_voxels, "waiting to start visualizing maps" << endl);
-  bool is_loop = true;
-  std::chrono::system_clock::time_point loop_start, callback_end, copy_end, reconend, visualend, loop_end;
-  std::chrono::duration<double> callback_time, synchronize_time, copy_time, visualtimecount, elapsed_seconds;
-
-  while (rclcpp::ok())
-  {
-    if(is_loop ) {
-      if(debug_chrono) {loop_start = std::chrono::system_clock::now();}
-      is_loop = false;}
-
-    // read parameter reconfigure
-    cam0_show=node->_master_show;
-    cam1_show=node->_sub1_show; 
-    cam2_show=node->_sub2_show;
-    usleep_time=node->_usleep_time;
-    executor.spin_once();
-    if(node->_data_received)
-    {
-      node->_data_received = false;
-      is_loop = true;
-      std::cout << "[DEBUG] Iteration =========> " << iteration << std::endl;
-      if(debug_chrono){
-        std::chrono::system_clock::time_point callback_end = std::chrono::system_clock::now();
-        std::chrono::duration<double> callback_time = node->callback_duration;
-        std::chrono::duration<double> synchronize_time = callback_end - loop_start;
-        std::cout << "[DEBUG] : (chrono::system_clock) Synchronization Time         : " << synchronize_time.count()*1000 - callback_time.count()*1000 << "ms" << std::endl;
-        timeMeasureTable[0][iteration] = synchronize_time.count()*1000 - callback_time.count()*1000;
-        syncTime += synchronize_time.count()*1000 - callback_time.count()*1000;
-        timeMeasureTable[1][iteration] = callback_time.count()*1000;
-        callbackTime += callback_time.count() * 1000;
-        std::cout << "[DEBUG] : (chrono::system_clock) Callback Processing Time     : " << callback_time.count()*1000 << "ms" << std::endl;
-      }
-    
-      
-      // toDeviceMem += dk.toDeviceMemory(inputDepths);
-      // dk.toDeviceMemoryYoso(inputDepths,inputMasks,mask_width,mask_height);
-      dk.toDeviceMemoryYosoArray(inputDepths,inputMasks,mask_width,mask_height);
-      if(debug_chrono){
-        std::chrono::system_clock::time_point copy_end = std::chrono::system_clock::now();
-        std::chrono::duration<double> copy_time = copy_end - callback_end;
-        std::cout << "[DEBUG] : (chrono::system_clock) Copy to Device Memory Time   : " << copy_time.count()*1000 << "ms" << std::endl;
-        timeMeasureTable[2][iteration] = copy_time.count()*1000;
-        copyTime += copy_time.count() * 1000;
-      }
-
-      if(node->_isClearMap) ptrbitVoxmap->clearMap();
-      float reconTimeOnce=0;
-      // reconTimeOnce = dk.generatePointCloudFromDevice3DSpace();
-      // this for yoso
-      // reconTimeOnce+=dk.RuninsertPclWithYoso(ptrbitVoxmap);
-      // reconTime+=reconTimeOnce;
-      if(node->_isClearMap) reconTimeOnce = dk.ReconVoxelToDepthtest(ptrbitVoxmap);
-      else reconTimeOnce = dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
-
-      // reconTimeOnce= node->_isClearMap ? dk.ReconVoxelToDepthtest(ptrbitVoxmap): dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
-      if(debug_chrono){
-        reconTime+=reconTimeOnce;
-        std::cout << "[DEBUG] : (chrono::system_clock) Reconstruction Time          : " << reconTimeOnce << " ms" << std::endl;
-        timeMeasureTable[3][iteration] = reconTimeOnce;
-        reconTimeOnce=0;
-        std::chrono::system_clock::time_point reconend = std::chrono::system_clock::now();
-        gvl->visualizeMap("voxelmap_1");
-        std::chrono::system_clock::time_point visualend = std::chrono::system_clock::now();
-        std::chrono::duration<double> visualtimecount = visualend - reconend;
-        std::cout << "[DEBUG] : (chrono::system_clock) Visualize Map Time           : " << visualtimecount.count() * 1000 << " ms" << std::endl;
-        timeMeasureTable[4][iteration] = visualtimecount.count() * 1000;
-        visualTime += visualtimecount.count() * 1000;
-        timeMeasureTable[5][iteration] = usleep_time;
-        std::cout << "[DEBUG] : (chrono::system_clock) Usleep Time                  : " << usleep_time/1000 << " ms" << std::endl;
-        usleep(usleep_time);
-        gvl->visualizeMap("voxelmap_1");
-      }
-      else {gvl->visualizeMap("voxelmap_1");usleep(usleep_time); }
-      
-      if(iteration==50) dk.saveVoxelRaw(ptrbitVoxmap);
-
-      iteration++;
-
-      if(debug_chrono && iteration == 500)
-      {
-        std::cout << "*******************************************************" << std::endl;
-        std::cout << "[During 500 iteration] Check the mean time for task" << std::endl;
-        std::cout << "[DEBUG] Synchronization Time         : " << syncTime/iteration << "ms" << std::endl;
-        std::cout << "[DEBUG] Callback Processing Time     : " << callbackTime/iteration << "ms" << std::endl;
-        std::cout << "[DEBUG] Copy to Device Memory Time   : " << copyTime/iteration << "ms" << std::endl;
-        std::cout << "[DEBUG] Reconstruction Time          : " << reconTime/iteration << "ms" << std::endl;
-        std::cout << "[DEBUG] Visualize Time               : " << visualTime/iteration << "ms" << std::endl;
-        std::cout << "[DEBUG] Usleep Time                  : " << usleep_time/1000 << "ms" << std::endl;
-        std::cout << "*******************************************************" << std::endl;
-
-        writeFile.open("/home/do/ros2_ws/src/gv_recon/TimeMeasures.txt");
-        // writeFile << "frame" << " " << "SyncTime" << " " << "CallbackTime" << " " << " CopyTime " <<"\n";
-        writeFile << "frame" << " " << "SyncTime" << " " << "CallbackTime" << " " << "CopyTime" 
-                  << " " << "ReconTime" << " " << "VisTime" << " " << "UsleepTime" << "\n";
-
-        for(int i = 0; i < iteration; i++) 
-        {
-          writeFile << i << " " << timeMeasureTable[0][i] << " " << timeMeasureTable[1][i] << " " << timeMeasureTable[2][i] << " " 
-          << timeMeasureTable[3][i] << " " << timeMeasureTable[4][i] << " " << timeMeasureTable[5][i] <<"\n";
-        }
-        writeFile.close();
-
-        timeMeasureTable[0].clear();
-        timeMeasureTable[1].clear();
-        timeMeasureTable[2].clear();
-        timeMeasureTable[3].clear();
-        timeMeasureTable[4].clear();
-        timeMeasureTable[5].clear();
-
-        copyTime, genPointCloud, reconTime,callbackTime,visualTime,syncTime = 0.0;
-        // toDeviceMem, genPointCloud, reconTime, visualTime = 0.0;
-        iteration = 0;
-
-        std::chrono::system_clock::time_point loop_end = std::chrono::system_clock::now();
-        std::chrono::duration<double> elapsed_seconds = loop_end - loop_start;
-        std::cout << "[DEBUG] : (chrono::system_clock) Total Reconstruction Time    : " << elapsed_seconds.count() * 1000 << " ms" << std::endl;
-      }
-
-    }
-  }
-  for (int i = 0; i < numofcamera; i++) {
-    delete[] inputDepths[i];
-    delete[] inputMasks[i];
-    inputDepths[i] = nullptr;
-    inputMasks[i] = nullptr;
-  }
-  rclcpp::shutdown();
-  // delete[] occupied_bit_map;
-  LOGGING_INFO(Gpu_voxels, "shutting down" << endl);
-  exit(EXIT_SUCCESS);
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// initialize marching cubes
-////////////////////////////////////////////////////////////////////////////////
-void initMC(int argc, char **argv) {
-  // parse command line arguments
-  int n;
-  if (checkCmdLineFlag(argc, (const char **)argv, "grid")) {
-    n = getCmdLineArgumentInt(argc, (const char **)argv, "grid");
-    gridSizeLog2.x = gridSizeLog2.y = gridSizeLog2.z = n;
-  }
-
-  if (checkCmdLineFlag(argc, (const char **)argv, "gridx")) {
-    n = getCmdLineArgumentInt(argc, (const char **)argv, "gridx");
-    gridSizeLog2.x = n;
-  }
-
-  if (checkCmdLineFlag(argc, (const char **)argv, "gridy")) {
-    n = getCmdLineArgumentInt(argc, (const char **)argv, "gridy");
-    gridSizeLog2.y = n;
-  }
-
-  if (checkCmdLineFlag(argc, (const char **)argv, "gridz")) {
-    n = getCmdLineArgumentInt(argc, (const char **)argv, "gridz");
-    gridSizeLog2.z = n;
-  }
-
-  char *filename;
-
-  if (getCmdLineArgumentString(argc, (const char **)argv, "file", &filename)) {
-    volumeFilename = filename;
-  }
-
-  gridSize =
-      make_uint3(1 << gridSizeLog2.x, 1 << gridSizeLog2.y, 1 << gridSizeLog2.z);
-  gridSizeMask = make_uint3(gridSize.x - 1, gridSize.y - 1, gridSize.z - 1);
-  gridSizeShift =
-      make_uint3(0, gridSizeLog2.x, gridSizeLog2.x + gridSizeLog2.y);
-
-  numVoxels = gridSize.x * gridSize.y * gridSize.z;
-  voxelSize =
-      make_float3(2.0f / gridSize.x, 2.0f / gridSize.y, 2.0f / gridSize.z);
-  maxVerts = gridSize.x * gridSize.y * 100;
-
-  printf("grid: %d x %d x %d = %d voxels\n", gridSize.x, gridSize.y, gridSize.z,
-        numVoxels);
-  printf("max verts = %d\n", maxVerts);
-
-#if SAMPLE_VOLUME
-  // load volume data
-  char *path = sdkFindFilePath(volumeFilename, argv[0]);
-
-  if (path == NULL) {
-    fprintf(stderr, "Error finding file '%s'\n", volumeFilename);
-
-    exit(EXIT_FAILURE);
-  }
-
-  int size = gridSize.x * gridSize.y * gridSize.z * sizeof(uchar);
-  uchar *volume = loadRawFile(path, size);
-  cudaMalloc((void **)&d_volume, size);
-  cudaMemcpy(d_volume, volume, size, cudaMemcpyHostToDevice);
-  free(volume);
-
-  createVolumeTexture(d_volume, size);
-#endif
-
+//////////////////////////
+// Marching Cubes Setup //
+//////////////////////////
+  mtx.lock();
+  createVolumeTexture(d_voxelRaw, gridSize.x * gridSize.y * gridSize.z * sizeof(uchar));
+  mtx.unlock();
   if (g_bValidate) {
     cudaMalloc((void **)&(d_pos), maxVerts * sizeof(float) * 4);
     cudaMalloc((void **)&(d_normal), maxVerts * sizeof(float) * 4);
@@ -584,7 +396,50 @@ void initMC(int argc, char **argv) {
   cudaMalloc((void **)&d_voxelOccupied, memSize);
   cudaMalloc((void **)&d_voxelOccupiedScan, memSize);
   cudaMalloc((void **)&d_compVoxelArray, memSize);
+
+
+
+
+  // start rendering mainloop
+  glutMainLoop();
 }
+
+int main(int argc, char** argv)
+{
+  rclcpp::init(argc, argv);
+  for(int i{0};i<3;i++)
+  {
+    inputDepths[i] = new float[depth_width * depth_height];
+    std::cout << "In Main : " << &inputDepths[i] << std::endl;
+    inputMasks[i] = new uint8_t[mask_width * mask_height];
+  }
+
+  ////////////////////
+  // cuda test code //
+  ////////////////////
+  int h_data = 1;
+  int* d_data;    
+  cudaMalloc((void**)&d_data, sizeof(int));
+  cudaMemcpy(d_data, &h_data, sizeof(int), cudaMemcpyHostToDevice);
+  cudaMemcpy(&h_data, d_data, sizeof(int), cudaMemcpyDeviceToHost);
+
+  printf("[CUDA test] Host-Device data transfer : %s\n", h_data==1 ? "PASS" : "FAIL"); 
+  cudaFree(d_data);
+
+
+  std::thread ros2_thread(run_ros2_with_gpuVoxels);
+  std::thread glut_thread(run_glut_with_marchingCubes, argc, argv);
+
+  glut_thread.join();
+  ros2_thread.join();
+  
+  
+  cleanup();
+  rclcpp::shutdown();
+  LOGGING_INFO(Gpu_voxels, "shutting down" << endl);
+  exit(EXIT_SUCCESS);
+}
+
 
 void cleanup() {
   if (g_bValidate) {
@@ -606,53 +461,19 @@ void cleanup() {
   cudaFree(d_voxelOccupiedScan);
   cudaFree(d_compVoxelArray);
 
-  if (d_volume) {
-    cudaFree(d_volume);
+  if (d_voxelRaw) {
+    cudaFree(d_voxelRaw);
   }
-}
-
-void runGraphicsTest(int argc, char **argv) {
-  printf("MarchingCubes\n");
-
-  if (checkCmdLineFlag(argc, (const char **)argv, "device")) {
-    printf("[%s]\n", argv[0]);
-    printf("   Does not explicitly support -device=n in OpenGL mode\n");
-    printf("   To use -device=n, the sample must be running w/o OpenGL\n\n");
-    printf(" > %s -device=n -file=<reference> -dump=<0/1/2>\n", argv[0]);
-    exit(EXIT_SUCCESS);
-  }
-
-  // First initialize OpenGL context, so we can properly set the GL for CUDA.
-  // This is necessary in order to achieve optimal performance with OpenGL/CUDA
-  // interop.
-  if (false == initGL(&argc, argv)) {
-    return;
-  }
-
-  // findCudaDevice(argc, (const char **)argv);
-
-  // register callbacks
-  glutDisplayFunc(display);
-  glutKeyboardFunc(keyboard);
-  glutMouseFunc(mouse);
-  glutMotionFunc(motion);
-  glutReshapeFunc(reshape);
-  glutTimerFunc(REFRESH_DELAY, timerEvent, 0);
-  initMenus();
-
-  // Initialize CUDA buffers for Marching Cubes
-  initMC(argc, argv);
-
-  sdkCreateTimer(&timer);
-
-  // start rendering mainloop
-  glutMainLoop();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Run the Cuda part of the computation
 ////////////////////////////////////////////////////////////////////////////////
 void computeIsosurface() {
+  mtx.lock();
+  if(!isValid){mtx.unlock(); return;}
+  
+  isValid = false;
   int threads = 128;
   dim3 grid(numVoxels / threads, 1, 1);
 
@@ -663,10 +484,9 @@ void computeIsosurface() {
   }
 
   // calculate number of vertices need per voxel
-  launch_classifyVoxel(grid, threads, d_voxelVerts, d_voxelOccupied, d_volume,
+  launch_classifyVoxel(grid, threads, d_voxelVerts, d_voxelOccupied, d_voxelRaw,
                       gridSize, gridSizeShift, gridSizeMask, numVoxels,
                       voxelSize, isoValue);
-
 
 #if SKIP_EMPTY_VOXELS
   // scan voxel occupied array
@@ -743,7 +563,7 @@ void computeIsosurface() {
 
 #if SAMPLE_VOLUME
   launch_generateTriangles2(grid2, NTHREADS, d_pos, d_normal, d_compVoxelArray,
-                            d_voxelVertsScan, d_volume, gridSize, gridSizeShift,
+                            d_voxelVertsScan, d_voxelRaw, gridSize, gridSizeShift,
                             gridSizeMask, voxelSize, isoValue, activeVoxels,
                             maxVerts);
 #else
@@ -752,7 +572,7 @@ void computeIsosurface() {
                           gridSizeMask, voxelSize, isoValue, activeVoxels,
                           maxVerts);
 #endif
-
+  mtx.unlock();
   if (!g_bValidate) {
     // DEPRECATED:      checkCudaErrors(cudaGLUnmapBufferObject(normalVbo));
     cudaGraphicsUnmapResources(1, &cuda_normalvbo_resource, 0);
@@ -878,11 +698,6 @@ void motion(int x, int y) {
   glutPostRedisplay();
 }
 
-void idle() {
-  animation();
-  glutPostRedisplay();
-}
-
 void reshape(int w, int h) {
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
@@ -959,7 +774,7 @@ void display() {
   glutReportErrors();
 
   sdkStopTimer(&timer);
-
+  destroyAllTextureObjects();
   computeFPS();
 }
 
@@ -1046,27 +861,6 @@ void computeFPS() {
     fpsLimit = ftoi(MAX(1.f, ifps));
     sdkResetTimer(&timer);
   }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Load raw data from disk
-////////////////////////////////////////////////////////////////////////////////
-
-uchar *loadRawFile(char *filename, int size) {
-  FILE *fp = fopen(filename, "rb");
-
-  if (!fp) {
-    fprintf(stderr, "Error opening file '%s'\n", filename);
-    return 0;
-  }
-
-  uchar *data = (uchar *)malloc(size);
-  size_t read = fread(data, 1, size, fp);
-  fclose(fp);
-
-  printf("Read '%s', %d bytes\n", filename, (int)read);
-  return data;
 }
 
 GLuint compileASMShader(GLenum program_type, const char *code) {

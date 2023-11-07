@@ -73,26 +73,13 @@ if(CUDA_FOUND)
   # for call gpu_voxels kernel
   set(kfusion_cuda_srcs
 	    src/kernelCall.cu
+      src/marchingCubes/marchingCubes_kernel.cu
       )
   cuda_add_library(kfusion-cuda STATIC
               ${kfusion_cuda_srcs} OPTIONS -O3
               )
   target_link_libraries(kfusion-cuda)
 
-  # for using marching cubes
-  set(marching_cubes_srcs
-      include/marchingCubes_kernel.h
-      src/marchingCubes/marchingCubes_kernel.cu
-      # src/marchingCubes/marchingCubes.cu
-      
-      )
-
-
-  cuda_add_library(marching_cubes-cuda STATIC
-              ${marching_cubes_srcs} OPTIONS -O3
-              )
-  target_link_libraries(marching_cubes-cuda)
-  
 endif(CUDA_FOUND)
 
 ##########################################################################
@@ -107,7 +94,6 @@ add_executable(az_yoso ${SOURCEFILES})
 
 target_link_libraries(az_yoso
                       kfusion-cuda
-                      marching_cubes-cuda
                       ${OPENGL_LIBRARIES}
                       ${GLEW_LIBRARIES}
                       ${OpenCV_LIBS}

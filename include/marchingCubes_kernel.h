@@ -24,9 +24,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
-// #ifndef _MARCHING_CUBES_KERNEL_CUH_
-// #define _MARCHING_CUBES_KERNEL_CUH_
+
+#ifndef _MARCHING_CUBES_KERNEL_H_
+#define _MARCHING_CUBES_KERNEL_H_
 
 #include <stdio.h>
 #include <string.h>
@@ -39,103 +39,74 @@
 #include "MCdefines.h"
 #include "MCtables.h"
 
-    
 
-  // textures containing look-up tables
-  cudaTextureObject_t _triTex;
-  cudaTextureObject_t _numVertsTex;
+extern "C" void allocateTextures(uint **d_edgeTable, uint **d_triTable, uint **d_numVertsTable);
 
-  // volume data
-  cudaTextureObject_t _volumeTex;
+extern "C" void createVolumeTexture(uchar *d_volume, size_t buffSize);
 
-  ////////////////////////////////////
-  // declarations of host functions //
-  ////////////////////////////////////
+extern "C" void destroyAllTextureObjects();
 
-  extern "C" void allocateTextures(uint **d_edgeTable, uint **d_triTable, uint **d_numVertsTable);
+// an interesting field function
+__device__ float tangle(float x, float y, float z);
 
-  extern "C" void createVolumeTexture(uchar *d_volume, size_t buffSize);
+// evaluate field function at point
+__device__ float fieldFunc(float3 p);
 
-  extern "C" void destroyAllTextureObjects();
+// evaluate field function at a point
+// returns value and gradient in float4
+__device__ float4 fieldFunc4(float3 p);
 
-  extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts, uint *voxelOccupied, uchar *volume,
-                            uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels,
-                            float3 voxelSize, float isoValue);
+// sample volume data set at a point
+__device__ float sampleVolume(cudaTextureObject_t volumeTex, uchar *data, uint3 p, uint3 gridSize);
 
-  extern "C" void launch_compactVoxels(dim3 grid, dim3 threads, uint *compactedVoxelArray, uint *voxelOccupied,
-                            uint *voxelOccupiedScan, uint numVoxels);
+// compute position in 3d grid from 1d index
+// only works for power of 2 sizes
+__device__ uint3 calcGridPos(uint i, uint3 gridSizeShift, uint3 gridSizeMask);
 
-  extern "C" void launch_generateTriangles(
-      dim3 grid, dim3 threads, float4 *pos, float4 *norm,
-      uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize,
-      uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue,
-      uint activeVoxels, uint maxVerts);
+// classify voxel based on number of vertices it will generate
+// one thread per voxel
+__global__ void classifyVoxel(uint *voxelVerts, uint *voxelOccupied, uchar *volume, uint3 gridSize, uint3 gridSizeShift, 
+                              uint3 gridSizeMask, uint numVoxels, float3 voxelSize, float isoValue,
+                              cudaTextureObject_t numVertsTex, cudaTextureObject_t volumeTex);
 
-  extern "C" void launch_generateTriangles2(
-      dim3 grid, dim3 threads, float4 *pos, float4 *norm,
-      uint *compactedVoxelArray, uint *numVertsScanned, uchar *volume,
-      uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize,
-      float isoValue, uint activeVoxels, uint maxVerts);
+extern "C" void launch_classifyVoxel(dim3 grid, dim3 threads, uint *voxelVerts, uint *voxelOccupied, uchar *volume,
+                                     uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels,
+                                     float3 voxelSize, float isoValue);
 
-  extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input, unsigned int numElements);
+// compact voxel array
+__global__ void compactVoxels(uint *compactedVoxelArray, uint *voxelOccupied, uint *voxelOccupiedScan, uint numVoxels);
 
-  //////////////////////////////////////
-  // declarations of device functions //
-  //////////////////////////////////////
+extern "C" void launch_compactVoxels(dim3 grid, dim3 threads, uint *compactedVoxelArray, uint *voxelOccupied,
+                                     uint *voxelOccupiedScan, uint numVoxels);
 
-  // an interesting field function
-  __device__ __forceinline__ 
-  float tangle(float x, float y, float z);
+// compute interpolated vertex along an edge
+__device__ float3 vertexInterp(float isolevel, float3 p0, float3 p1, float f0, float f1);
 
-  // evaluate field function at point
-  __device__ __forceinline__ 
-  float fieldFunc(float3 p);
+// compute interpolated vertex position and normal along an edge
+__device__ void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, float3 &p, float3 &n);
 
-  // evaluate field function at a point
-  // returns value and gradient in float4
-  __device__ __forceinline__ 
-  float4 fieldFunc4(float3 p);
+// generate triangles for each voxel using marching cubes
+// interpolates normals from field function
+__global__ void generateTriangles(float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize, 
+                                  uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
+                                  cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex);
 
-  // sample volume data set at a point
-  __device__  __forceinline__ 
-  float sampleVolume(cudaTextureObject_t _volumeTex, uchar *data, uint3 p, uint3 gridSize);
+extern "C" void launch_generateTriangles(dim3 grid, dim3 threads, float4 *pos, float4 *norm,uint *compactedVoxelArray, 
+                                        uint *numVertsScanned, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, 
+                                        float isoValue, uint activeVoxels, uint maxVerts);
 
-  // compute position in 3d grid from 1d index
-  // only works for power of 2 sizes
-  __device__  __forceinline__ 
-  uint3 calcGridPos(uint i, uint3 gridSizeShift, uint3 gridSizeMask);
+// calculate triangle normal
+__device__ float3 calcNormal(float3 *v0, float3 *v1, float3 *v2);
 
-  // classify voxel based on number of vertices it will generate
-  // one thread per voxel
-  __global__ void classifyVoxel(uint *voxelVerts, uint *voxelOccupied, uchar *volume, uint3 gridSize,
-                                uint3 gridSizeShift, uint3 gridSizeMask, uint numVoxels, float3 voxelSize,
-                                float isoValue, cudaTextureObject_t _numVertsTex, cudaTextureObject_t _volumeTex);
+// version that calculates flat surface normal for each triangle
+__global__ void generateTriangles2(float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
+                                  uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask,
+                                  float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
+                                  cudaTextureObject_t triTex, cudaTextureObject_t numVertsTex, cudaTextureObject_t volumeTex);
 
-  // compact voxel array
-  __global__ void compactVoxels(uint *compactedVoxelArray, uint *voxelOccupied,
-                                uint *voxelOccupiedScan, uint numVoxels);
+extern "C" void launch_generateTriangles2(dim3 grid, dim3 threads, float4 *pos, float4 *norm, uint *compactedVoxelArray, 
+                                          uint *numVertsScanned, uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask, 
+                                          float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts);
 
-  // compute interpolated vertex along an edge
-  __device__ float3 vertexInterp(float isolevel, float3 p0, float3 p1, float f0, float f1);
-
-  // compute interpolated vertex position and normal along an edge
-  __device__ void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, float3 &p, float3 &n);
-
-  // calculate triangle normal
-  __device__ float3 calcNormal(float3 *v0, float3 *v1, float3 *v2);
-
-  // generate triangles for each voxel using marching cubes
-  // interpolates normals from field function
-  __global__ void generateTriangles(
-      float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned, uint3 gridSize, 
-      uint3 gridSizeShift, uint3 gridSizeMask, float3 voxelSize, float isoValue, uint activeVoxels, 
-      uint maxVerts, cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex);
-
-  // version that calculates flat surface normal for each triangle
-  __global__ void generateTriangles2(
-      float4 *pos, float4 *norm, uint *compactedVoxelArray, uint *numVertsScanned,
-      uchar *volume, uint3 gridSize, uint3 gridSizeShift, uint3 gridSizeMask,
-      float3 voxelSize, float isoValue, uint activeVoxels, uint maxVerts,
-      cudaTextureObject_t _triTex, cudaTextureObject_t _numVertsTex,
-      cudaTextureObject_t _volumeTex);
-
+extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input, unsigned int numElements);
+#endif

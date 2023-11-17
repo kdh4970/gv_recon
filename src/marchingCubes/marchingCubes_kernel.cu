@@ -593,7 +593,6 @@ __global__ void generateTriangles2(
 
   // output triangle vertices
   uint numVerts = tex1Dfetch<uint>(numVertsTex, cubeindex);
-
   for (int i = 0; i < numVerts; i += 3) {
     uint index = numVertsScanned[voxel] + i;
 
@@ -632,6 +631,7 @@ __global__ void generateTriangles2(
 
       pos[index + 2] = make_float4(*v[2], 1.0f);
       norm[index + 2] = make_float4(n, 0.0f);
+
     }
   }
 }

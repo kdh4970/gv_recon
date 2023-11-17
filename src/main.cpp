@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <thread>
 #include <mutex>
+#include <string>
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
@@ -24,9 +25,13 @@
 #define EPSILON 5.0f
 #define THRESHOLD 0.30f
 
-// constants
-const unsigned int window_width = 512;
-const unsigned int window_height = 512;
+// Shared Variable for DeviceKernel and marchingcubes
+std::mutex mtx;
+uchar* d_voxelRaw;
+bool isValid = false;
+
+unsigned int window_width = 1280;
+unsigned int window_height = 720;
 
 // grid size parameters
 uint3 gridSizeLog2 = make_uint3(9, 9, 9);
@@ -56,8 +61,7 @@ bool g_bValidate = false;
 // device data
 GLuint posVbo, normalVbo;
 GLint gl_Shader;
-struct cudaGraphicsResource *cuda_posvbo_resource,
-*cuda_normalvbo_resource;  // handles OpenGL-CUDA exchange
+struct cudaGraphicsResource *cuda_posvbo_resource, *cuda_normalvbo_resource, *cuda_facevbo_resource;  // handles OpenGL-CUDA exchange
 
 float4 *d_pos = 0, *d_normal = 0;
 
@@ -73,6 +77,7 @@ uint *d_edgeTable = 0;
 uint *d_triTable = 0;
 
 // mouse controls
+float _fovy = 45.0;
 int mouse_old_x, mouse_old_y;
 int mouse_buttons = 0;
 float3 glrotate = make_float3(0.0, 0.0, 0.0);
@@ -80,7 +85,7 @@ float3 gltranslate = make_float3(0.0, 0.0, -3.0);
 
 // toggles
 bool wireframe = false;
-bool animate = true;
+bool animate = false;
 bool lighting = true;
 bool render = true;
 bool compute = true;
@@ -107,6 +112,7 @@ void timerEvent(int value);
 bool initGL(int *argc, char **argv);
 void initMenus();
 void computeFPS();
+void WriteTxtFile();
 GLuint compileASMShader(GLenum program_type, const char *code);
 
 
@@ -147,10 +153,7 @@ uint16_t mask_width=640;
 uint16_t mask_height=360;
 shared_ptr<GpuVoxels> gvl;
 
-// Shared Variable for DeviceKernel and marchingcubes
-std::mutex mtx;
-uchar* d_voxelRaw;
-bool isValid = false;
+
 
 
 void ctrlchandler(int)
@@ -172,6 +175,12 @@ void killhandler(int)
   exit(EXIT_SUCCESS);
 }
 
+/**
+ * @brief Get the Device Voxel Data Object
+ * 
+ * @param ptrbitVoxmap : shared pointer of voxel map what type is gpu_voxels::voxelmap::BitVectorVoxelMap
+ * @param numVoxels : number of voxels
+ */
 void getVoxelData(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap, const int numVoxels)
 {
   mtx.lock();
@@ -186,6 +195,7 @@ void getVoxelData(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap, c
 
 void run_ros2_with_gpuVoxels()
 {
+  mtx.lock();
   // Initialize ROS
   rclcpp::executors::MultiThreadedExecutor executor;
   auto node = std::make_shared<SyncedSubNode>(inputDepths, inputMasks, depth_width, depth_height ,mask_width, mask_height);
@@ -202,7 +212,6 @@ void run_ros2_with_gpuVoxels()
   if(!node->_isMask) {
     for(int i{0};i<3;i++) {delete inputMasks[i];} 
   }
-
   // Set Intrinsic
   std::vector<float4> ks;
   if(AzureMode == AzureDepthMode(RGB_R1536p)){
@@ -278,8 +287,19 @@ void run_ros2_with_gpuVoxels()
   signal(SIGTERM, killhandler);
 
   // recommand map_size_x and map_size_y are same. 
-  if(map_size_x==256 && map_size_y == 256) voxel_side_length = icl_core::config::paramOptDefault<float>("voxel_side_length", 0.02f);
-  else if(map_size_x==512 && map_size_x == 512) voxel_side_length = icl_core::config::paramOptDefault<float>("voxel_side_length", 0.01f);
+  if(map_size_x==256 && map_size_y == 256) {
+    voxel_side_length = icl_core::config::paramOptDefault<float>("voxel_side_length", 0.02f);
+    gridSizeLog2 = make_uint3(8, 8, 8);
+    gridSizeShift = make_uint3(0, gridSizeLog2.x, gridSizeLog2.x + gridSizeLog2.y);
+    gridSize = make_uint3(1 << gridSizeLog2.x, 1 << gridSizeLog2.y, 1 << gridSizeLog2.z);
+    gridSizeMask = make_uint3(gridSize.x - 1, gridSize.y - 1, gridSize.z - 1);
+    voxelSize = make_float3(2.0f / gridSize.x, 2.0f / gridSize.y, 2.0f / gridSize.z);
+    numVoxels = gridSize.x * gridSize.y * gridSize.z;
+    maxVerts = gridSize.x * gridSize.y * 100;
+  }
+  else if(map_size_x==512 && map_size_x == 512){
+    voxel_side_length = icl_core::config::paramOptDefault<float>("voxel_side_length", 0.01f);
+  }
   else{
     printf("Map size error!\n map size should be 256 or 512 and x and y should be same.\n");
     exit(EXIT_SUCCESS);
@@ -300,7 +320,7 @@ void run_ros2_with_gpuVoxels()
   ptrbitVoxmap->setConstMemory(depth_width, depth_height,mask_width,static_cast<float>(mask_width) / depth_width);
   const int numVoxels = ptrbitVoxmap->getDimensions().x * ptrbitVoxmap->getDimensions().y * ptrbitVoxmap->getDimensions().z;
 	
-  mtx.lock();
+  
   cudaMalloc(&d_voxelRaw, sizeof(uchar) * numVoxels);
   mtx.unlock();
 
@@ -329,7 +349,7 @@ void run_ros2_with_gpuVoxels()
       }
       else reconTimeOnce = dk.ReconVoxelWithPreprocess(ptrbitVoxmap);
 
-      gvl->visualizeMap("voxelmap_1");
+      // gvl->visualizeMap("voxelmap_1");
 
       getVoxelData(ptrbitVoxmap, numVoxels);
       usleep(usleep_time);
@@ -347,8 +367,12 @@ void run_ros2_with_gpuVoxels()
 
 void run_glut_with_marchingCubes(int argc, char** argv)
 {
+  mtx.lock();
+  printf("=============================== MC INFO ================================\n");
   printf("grid: %d x %d x %d = %d voxels\n", gridSize.x, gridSize.y, gridSize.z, numVoxels);
   printf("max verts = %d\n", maxVerts);
+  createVolumeTexture(d_voxelRaw, gridSize.x * gridSize.y * gridSize.z * sizeof(uchar));
+  mtx.unlock();
 ////////////////
 // GLUT Setup //
 ////////////////
@@ -368,9 +392,7 @@ void run_glut_with_marchingCubes(int argc, char** argv)
 //////////////////////////
 // Marching Cubes Setup //
 //////////////////////////
-  mtx.lock();
-  createVolumeTexture(d_voxelRaw, gridSize.x * gridSize.y * gridSize.z * sizeof(uchar));
-  mtx.unlock();
+  
   if (g_bValidate) {
     cudaMalloc((void **)&(d_pos), maxVerts * sizeof(float) * 4);
     cudaMalloc((void **)&(d_normal), maxVerts * sizeof(float) * 4);
@@ -385,6 +407,7 @@ void run_glut_with_marchingCubes(int argc, char** argv)
     // DEPRECATED: checkCudaErrors(cudaGLRegisterBufferObject(normalVbo));
     cudaGraphicsGLRegisterBuffer(
         &cuda_normalvbo_resource, normalVbo, cudaGraphicsMapFlagsWriteDiscard);
+    
   }
   // allocate textures
   allocateTextures(&d_edgeTable, &d_triTable, &d_numVertsTable);
@@ -404,41 +427,7 @@ void run_glut_with_marchingCubes(int argc, char** argv)
   glutMainLoop();
 }
 
-int main(int argc, char** argv)
-{
-  rclcpp::init(argc, argv);
-  for(int i{0};i<3;i++)
-  {
-    inputDepths[i] = new float[depth_width * depth_height];
-    std::cout << "In Main : " << &inputDepths[i] << std::endl;
-    inputMasks[i] = new uint8_t[mask_width * mask_height];
-  }
 
-  ////////////////////
-  // cuda test code //
-  ////////////////////
-  int h_data = 1;
-  int* d_data;    
-  cudaMalloc((void**)&d_data, sizeof(int));
-  cudaMemcpy(d_data, &h_data, sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(&h_data, d_data, sizeof(int), cudaMemcpyDeviceToHost);
-
-  printf("[CUDA test] Host-Device data transfer : %s\n", h_data==1 ? "PASS" : "FAIL"); 
-  cudaFree(d_data);
-
-
-  std::thread ros2_thread(run_ros2_with_gpuVoxels);
-  std::thread glut_thread(run_glut_with_marchingCubes, argc, argv);
-
-  glut_thread.join();
-  ros2_thread.join();
-  
-  
-  cleanup();
-  rclcpp::shutdown();
-  LOGGING_INFO(Gpu_voxels, "shutting down" << endl);
-  exit(EXIT_SUCCESS);
-}
 
 
 void cleanup() {
@@ -548,6 +537,7 @@ void computeIsosurface() {
     cudaGraphicsMapResources(1, &cuda_normalvbo_resource, 0);
     cudaGraphicsResourceGetMappedPointer(
         (void **)&d_normal, &num_bytes, cuda_normalvbo_resource);
+
   }
 
 #if SKIP_EMPTY_VOXELS
@@ -612,6 +602,7 @@ void deleteVBO(GLuint *vbo, struct cudaGraphicsResource **cuda_resource) {
 //! Keyboard events handler
 ////////////////////////////////////////////////////////////////////////////////
 void keyboard(unsigned char key, int /*x*/, int /*y*/) {
+  bool zoom = false;
   switch (key) {
     case (27):
       cleanup();
@@ -652,6 +643,38 @@ void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     case 'c':
       compute = !compute;
       break;
+
+    case 'a':
+      _fovy -= 2.0;
+      zoom=true;
+      if (_fovy < 15.0) {_fovy = 15.0; zoom = false;}
+      if (_fovy > 90.0) {_fovy = 90.0; zoom = false;}
+      if(zoom){
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        gluPerspective(_fovy, (float)window_width / (float)window_height, 0.1, 10.0);
+        glMatrixMode(GL_MODELVIEW);
+        glViewport(0, 0, window_width, window_height);
+      }
+      break;
+
+    case 'd':
+      _fovy += 2.0;
+      zoom=true;
+      if (_fovy < 15.0) {_fovy = 15.0; zoom = false;}
+      if (_fovy > 90.0) {_fovy = 90.0; zoom = false;}
+      if(zoom){
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        gluPerspective(_fovy, (float)window_width / (float)window_height, 0.1, 10.0);
+        glMatrixMode(GL_MODELVIEW);
+        glViewport(0, 0, window_width, window_height);
+      }
+      break;
+    
+    case 's':
+      WriteTxtFile();
+      
   }
 
   printf("isoValue = %f\n", isoValue);
@@ -674,10 +697,11 @@ void mouse(int button, int state, int x, int y) {
   } else if (state == GLUT_UP) {
     mouse_buttons = 0;
   }
-
+  
   mouse_old_x = x;
   mouse_old_y = y;
 }
+
 
 void motion(int x, int y) {
   float dx = (float)(x - mouse_old_x);
@@ -701,11 +725,14 @@ void motion(int x, int y) {
 void reshape(int w, int h) {
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  gluPerspective(60.0, (float)w / (float)h, 0.1, 10.0);
+  gluPerspective(_fovy, (float)w / (float)h, 0.1, 10.0);
 
   glMatrixMode(GL_MODELVIEW);
   glViewport(0, 0, w, h);
+  window_height=h;
+  window_width=w;
 }
+
 
 void mainMenu(int i) { keyboard((unsigned char)i, 0, 0); }
 
@@ -729,13 +756,12 @@ void timerEvent(int value) {
   glutTimerFunc(REFRESH_DELAY, timerEvent, 0);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 //! Display callback
 ////////////////////////////////////////////////////////////////////////////////
 void display() {
   sdkStartTimer(&timer);
-
+  
   // run CUDA kernel to generate geometry
   if (compute) {
     computeIsosurface();
@@ -761,6 +787,7 @@ void display() {
     // render
     if (render) {
       glPushMatrix();
+      glRotatef(180.0, 0.0, 0.0, 1.0);
       glRotatef(180.0, 0.0, 1.0, 0.0);
       glRotatef(90.0, 1.0, 0.0, 0.0);
       renderIsosurface();
@@ -769,7 +796,6 @@ void display() {
 
     glDisable(GL_LIGHTING);
   }
-
   glutSwapBuffers();
   glutReportErrors();
 
@@ -853,7 +879,7 @@ void computeFPS() {
   if (fpsCount == fpsLimit) {
     char fps[256];
     float ifps = 1.f / (sdkGetAverageTimerValue(&timer) / 1000.f);
-    sprintf(fps, "CUDA Marching Cubes: %3.1f fps", ifps);
+    sprintf(fps, "Vertices : %d, Active Voxels : %d", totalVerts, activeVoxels);
 
     glutSetWindowTitle(fps);
     fpsCount = 0;
@@ -897,6 +923,7 @@ void renderIsosurface() {
   glNormalPointer(GL_FLOAT, sizeof(float) * 4, 0);
   glEnableClientState(GL_NORMAL_ARRAY);
 
+
   glColor3f(1.0, 0.0, 0.0);
   glDrawArrays(GL_TRIANGLES, 0, totalVerts);
   glDisableClientState(GL_VERTEX_ARRAY);
@@ -905,3 +932,59 @@ void renderIsosurface() {
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
+void WriteTxtFile()
+{
+  char* filename = "/home/do/ros2_ws/src/gv_recon/mesh_data.txt";
+
+  // Copy device data to host data
+  std::cout<<"[DEBUG] Saving Vertices and Normals...\n";
+  float4* h_pos = new float4[totalVerts];
+  float4* h_normal = new float4[totalVerts];
+  cudaMemcpy(h_pos, d_pos, sizeof(float) * totalVerts * 4, cudaMemcpyDeviceToHost);
+  cudaMemcpy(h_normal, d_normal, sizeof(float) * totalVerts * 4, cudaMemcpyDeviceToHost);
+  std::cout<<"[DEBUG] Copy Done.\n";
+
+  // Open target obj file to write
+	FILE *fp=fopen(filename, "w");
+  std::cout<<"[DEBUG] Writing...\n";
+
+	// vertices and normals
+	for (auto i = 0; i < totalVerts; ++i)
+	{
+    auto const& v = h_pos[i];
+    auto const& vn = h_normal[i];
+		fprintf(fp, "v %f %f %f\n", v.x, v.y, v.z);
+    fprintf(fp, "vn %f %f %f\n", vn.x, vn.y, vn.z);
+  }
+
+  fclose(fp);
+  delete[] h_pos;
+  delete[] h_normal;
+  std::cout<<"[DEBUG] Saved.\n";
+}
+
+// Main Function
+int main(int argc, char** argv)
+{
+  rclcpp::init(argc, argv);
+  for(int i{0};i<3;i++)
+  {
+    inputDepths[i] = new float[depth_width * depth_height];
+    std::cout << "In Main : " << &inputDepths[i] << std::endl;
+    inputMasks[i] = new uint8_t[mask_width * mask_height];
+  }
+  // Start ROS2 and gpu_voxels thread
+  std::thread ros2_thread(run_ros2_with_gpuVoxels);
+  sleep(1);
+  // Start MarchingCubes and glut thread
+  std::thread glut_thread(run_glut_with_marchingCubes, argc, argv);
+
+  glut_thread.join();
+  ros2_thread.join();
+  
+  
+  cleanup();
+  rclcpp::shutdown();
+  LOGGING_INFO(Gpu_voxels, "shutting down" << endl);
+  exit(EXIT_SUCCESS);
+}

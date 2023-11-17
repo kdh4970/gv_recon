@@ -819,8 +819,9 @@ void TemplateVoxelMap<BitVectorVoxel>::ReconstructionWithPreprocess(float* const
   // std::cout<< "++++++++++++++++++++++++++++++++++++++++"<< std::endl;
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
   // kernelReconWithPreprocess<<<num_blocks, threads_per_block>>>(m_dev_data, m_dim, m_voxel_side_length, depthArr0, depthArr1, depthArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2, depth_width, depth_height);
-  kernelReconWithPreprocess<<<131072, 512>>>(m_dev_data, depthArr0, depthArr1, depthArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
-}
+  if(m_dim.x == 512 && m_dim.y == 512) kernelReconWithPreprocess<<<131072, 512>>>(m_dev_data, depthArr0, depthArr1, depthArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
+  else kernelReconWithPreprocess<<<num_blocks, threads_per_block>>>(m_dev_data, depthArr0, depthArr1, depthArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
+} 
 
 
 template<class Voxel>
@@ -843,8 +844,8 @@ void TemplateVoxelMap<BitVectorVoxel>::ReconstructionWithPreprocess(float* const
   computeLinearLoad(size, &num_blocks, &threads_per_block);
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
   // kernelReconWithPreprocess<<<num_blocks, threads_per_block>>>(m_dev_data, m_dim, m_voxel_side_length, depthArr0, depthArr1, depthArr2, maskArr0, maskArr1, maskArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2, depth_width, depth_height, mask_width, scale);
-  kernelReconWithPreprocess<<<131072, 512>>>(m_dev_data, depthArr0, depthArr1, depthArr2, maskArr0, maskArr1, maskArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
-
+  if(m_dim.x == 512 && m_dim.y == 512) kernelReconWithPreprocess<<<131072, 512>>>(m_dev_data, depthArr0, depthArr1, depthArr2, maskArr0, maskArr1, maskArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
+  else kernelReconWithPreprocess<<<num_blocks, threads_per_block>>>(m_dev_data, depthArr0, depthArr1, depthArr2, maskArr0, maskArr1, maskArr2, intrInvArr0, intrInvArr1, intrInvArr2, extrInvArr0, extrInvArr1, extrInvArr2);
 }
 
 template<class Voxel>

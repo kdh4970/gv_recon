@@ -245,11 +245,11 @@ double DeviceKernel::ReconVoxelWithPreprocess(boost::shared_ptr<voxelmap::BitVec
 	return timecount.count()*1000;
 }
 
-// /**
-//  * @brief Save voxel data to file
-//  * 
-//  * @param ptrbitVoxmap 
-//  */
+/**
+ * @brief Save voxel data to file
+ * 
+ * @param ptrbitVoxmap 
+ */
 // void DeviceKernel::saveVoxelRaw(boost::shared_ptr<voxelmap::BitVectorVoxelMap> ptrbitVoxmap)
 // {
 // 	std::cout<<"[Debug] Started >>> Saving Raw File...\n";

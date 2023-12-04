@@ -17,6 +17,7 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(OpenGL_GL_PREFERENCE LEGACY)
+# set(CUDAToolkit_LIBRARIES "/usr/local/cuda-11.3/lib64/")
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -33,6 +34,7 @@ find_package(statgrab REQUIRED)
 find_package(PCL 1.10 REQUIRED COMPONENTS common io)
 find_package(OpenMP REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(Open3D REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(TBB REQUIRED)
@@ -72,8 +74,8 @@ if(CUDA_FOUND)
 
   # for call gpu_voxels kernel
   set(kfusion_cuda_srcs
-	    src/kernelCall.cu
-      src/marchingCubes/marchingCubes_kernel.cu
+	    src/cuda/DeviceKernel.cu
+      src/cuda/marchingCubes_kernel.cu
       )
   cuda_add_library(kfusion-cuda STATIC
               ${kfusion_cuda_srcs} OPTIONS -O3
@@ -84,28 +86,31 @@ endif(CUDA_FOUND)
 
 ##########################################################################
 LIST(APPEND SOURCEFILES
-    src/SyncedSubNode.h   
     src/SyncedSubNode.cpp
+    src/marchingCubes.cpp
     # include/glDefines.h
     src/main.cpp
     )
 
 add_executable(az_yoso ${SOURCEFILES})
 
+target_link_directories(az_yoso PUBLIC
+  ${Open3D_LIBRARY_DIRS}
+  )
+
 target_link_libraries(az_yoso
                       kfusion-cuda
                       ${OPENGL_LIBRARIES}
-                      ${GLEW_LIBRARIES}
+                      # ${GLEW_LIBRARIES}
                       ${OpenCV_LIBS}
                       ${STATGRAB_LIBRARIES}
-                      ${OCTOMAP_LIBRARIES}
+                      # ${OCTOMAP_LIBRARIES}
                       ${PCL_LIBRARIES}
                       ${icl_core_LIBRARIES}
                       ${gpu_voxels_LIBRARIES}
                       ${GLUT_LIBRARIES}
-                      ${OpenGL_LIBRARIES}
+                      Open3D::Open3D
                       )
-
 ament_target_dependencies(az_yoso
   rclcpp
   sensor_msgs

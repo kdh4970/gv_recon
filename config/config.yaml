@@ -2,9 +2,9 @@ kfusion_node:
   ros__parameters:
     num_cameras: 3
     usleep_time: 30000
-    map_size_x: 512
-    map_size_y: 512
-    map_size_z: 512
+    map_size_x: 256
+    map_size_y: 256
+    map_size_z: 256
     isMask: False
     isClearMap: False
     recon_threshold: 0.02

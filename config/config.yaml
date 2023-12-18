@@ -5,7 +5,7 @@ kfusion_node:
     map_size_x: 256
     map_size_y: 256
     map_size_z: 256
-    isMask: False
+    isMask: True
     isClearMap: False
     recon_threshold: 0.02
     vis_unknown: True

@@ -5,7 +5,6 @@
 #define __linux__
 #endif
 
-#include <open3d/geometry/TriangleMesh.h>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -13,6 +12,8 @@
 #include <helper_functions.h>
 
 #include <cuda_runtime.h>
+
+#include <cuda_gl_interop.h>
 #include <tuple>
 // #include <cuda_gl_interop.h>
 #include <thread>
@@ -20,9 +21,10 @@
 #include <string>
 #include "cuda/marchingCubes_kernel.h"
 #include <boost/shared_ptr.hpp>
+#include <gpu_voxels/GpuVoxels.h>
 #include <gpu_voxels/voxelmap/TemplateVoxelMap.h>
-#include "cuda/DeviceKernel.h"
 
+#include "FastQuadric.h"
 
 /// for removing duplicated vertex
 template <typename TT>
@@ -83,6 +85,9 @@ extern uchar* d_voxelRaw;
 extern std::map<std::string, unsigned char> mask_decode_map;
 extern unsigned char offset;
 
+namespace MarchingCubes
+{
+
 ///////////////////////////////////////
 // forward declarations of GL and MC //
 ///////////////////////////////////////
@@ -105,6 +110,8 @@ void initMC(int argc, char **argv);
 void runGraphicsTest(int argc, char **argv); 
 
 void computeIsosurface();
+
+void computeIsosurface(uchar* mc_input);
 
 void createVBO(GLuint *vbo, unsigned int size);
 
@@ -132,15 +139,22 @@ void initMenus();
 
 void computeFPS();
 
-void SegmentMCinput(std::string target_class);
+void SegmentMCinput(std::string target_class, int target_index);
 
-void removeDuplicatedVertex(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3d> &normals, std::vector<Eigen::Vector3i> &triangles);
+void RemoveDuplicatedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
 
-void removeDuplicatedVertex2(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3d> &normals, std::vector<Eigen::Vector3i> &triangles);
+void RemoveUnreferencedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
 
-void WriteTxtFile(std::string target_class);
+void SimplifyMesh(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+
+void SimplifyMeshSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+
+void WriteTxtFile(std::string target_class, double decimation_ratio=0.5);
+
+void WriteTxtFileSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles, double decimation_ratio=0.5);
 
 GLuint compileASMShader(GLenum program_type, const char *code);
 
-
+}
 #endif // MARCHINGCUBES_H
+

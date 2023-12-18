@@ -112,6 +112,6 @@ extern "C" void ThrustScanWrapper(unsigned int *output, unsigned int *input, uns
 
 __global__ void generateMCInput(unsigned char* d_mc_input, unsigned char target_class_id);
 
-extern "C" void launch_generateMCInput(uint3 gridSize,unsigned char* d_mc_input, int target_class_id);
+extern "C" void launch_generateMCInput(uint3 gridSize, unsigned char* d_mc_input, int target_class_id);
 
 #endif

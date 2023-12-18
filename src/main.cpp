@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <signal.h>
 #include <stdlib.h>
-
+#include "cuda/DeviceKernel.h"
 #include "SyncedSubNode.h"
 
 #include "marchingCubes.h"
@@ -195,7 +195,6 @@ void run_ros2_with_gpuVoxels()
   cudaMalloc(&d_voxelRaw, sizeof(uchar) * numVoxels);
   mtx.unlock();
 
-
   // Create device kernel for call gpu_voxels kernel function 
   DeviceKernel dk(isMask,depth_width, depth_height, numofcamera, ks, extrinsicInv, gpuvox_ExtrArr);
   size_t iteration = 0;
@@ -222,7 +221,7 @@ void run_ros2_with_gpuVoxels()
 
       // gvl->visualizeMap("voxelmap_1");
       
-      getVoxelData(ptrbitVoxmap, numVoxels);
+      MarchingCubes::getVoxelData(ptrbitVoxmap, numVoxels);
       usleep(usleep_time);
       iteration++;
     }
@@ -237,7 +236,6 @@ void run_ros2_with_gpuVoxels()
 }
 
 
-
 // Main Function
 int main(int argc, char** argv)
 {
@@ -248,23 +246,17 @@ int main(int argc, char** argv)
     std::cout << "In Main : " << &inputDepths[i] << std::endl;
     inputMasks[i] = new uint8_t[mask_width * mask_height];
   }
-  mask_decode_map.insert(std::pair<std::string,unsigned char>("person",offset + 0));
-  mask_decode_map.insert(std::pair<std::string,unsigned char>("chair",offset + 14));
-  mask_decode_map.insert(std::pair<std::string,unsigned char>("table",offset + 45));
-  mask_decode_map.insert(std::pair<std::string,unsigned char>("wall",offset + 48));
-  mask_decode_map.insert(std::pair<std::string,unsigned char>("floor",offset + 46));
-
   // Start ROS2 and gpu_voxels thread
   std::thread ros2_thread(run_ros2_with_gpuVoxels);
   sleep(1);
   // Start MarchingCubes and glut thread
-  std::thread glut_thread(run_glut_with_marchingCubes, argc, argv);
+  std::thread glut_thread(MarchingCubes::run_glut_with_marchingCubes, argc, argv);
 
   glut_thread.join();
   ros2_thread.join();
   
   
-  cleanup();
+  MarchingCubes::cleanup();
   rclcpp::shutdown();
   LOGGING_INFO(Gpu_voxels, "shutting down" << endl);
   exit(EXIT_SUCCESS);

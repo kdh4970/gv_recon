@@ -88,6 +88,7 @@ endif(CUDA_FOUND)
 LIST(APPEND SOURCEFILES
     src/SyncedSubNode.cpp
     src/marchingCubes.cpp
+    src/FastQuadric.cpp
     # include/glDefines.h
     src/main.cpp
     )

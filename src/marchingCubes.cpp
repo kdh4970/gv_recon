@@ -18,8 +18,8 @@ uchar* d_mc_input;
 
 std::map<std::string, unsigned char> mask_decode_map;
 std::string target_segment_classes[5] = {"person", "chair", "table", "wall", "tv"};
-std::vector<Eigen::Vector3d> Segmented_Vertices[5];
-std::vector<Eigen::Vector3i> Segmented_Triangles[5];
+std::vector<float3> Segmented_Vertices[5];
+std::vector<int3> Segmented_Triangles[5];
 unsigned char offset = 6;
 
 bool isMultiThread = true;
@@ -85,7 +85,7 @@ bool lighting = true;
 bool render = true;
 bool compute = true;
 
-
+SharedMemoryManager shm_manager[5];
 
 namespace MarchingCubes 
 {
@@ -110,7 +110,6 @@ void run_glut_with_marchingCubes(int argc, char** argv)
   cudaMalloc(&d_mc_input, sizeof(uchar) * numVoxels);
   cudaMemset(d_mc_input, 0, sizeof(uchar) * numVoxels);
   createVolumeTexture(d_mc_input, gridSize.x * gridSize.y * gridSize.z * sizeof(uchar));
-  
   mtx.unlock();
 
   mask_decode_map.insert(std::pair<std::string,unsigned char>(target_segment_classes[0],offset + 0));
@@ -119,6 +118,11 @@ void run_glut_with_marchingCubes(int argc, char** argv)
   mask_decode_map.insert(std::pair<std::string,unsigned char>(target_segment_classes[3],offset + 48));
   mask_decode_map.insert(std::pair<std::string,unsigned char>(target_segment_classes[4],offset + 19));
 
+  // set shared memory manager
+  for(int i{0};i<5;i++)
+  {
+    shm_manager[i].init(1000+i,target_segment_classes[i]);
+  }
 
 ////////////////
 // GLUT Setup //
@@ -344,9 +348,11 @@ void SegmentMCinput(std::string target_class, int target_index){
   Segmented_Vertices[target_index].clear();
   Segmented_Triangles[target_index].clear();
   auto start = std::chrono::system_clock::now();
+  
   // first, choose the class. and call the kernel to convert voxel raw data to marching cubes input data.
   launch_generateMCInput(gridSize, d_mc_input, mask_decode_map[target_class]);
   cudaDeviceSynchronize();
+
   // second, compute isosurface. get d_pos
   computeIsosurface(); cudaDeviceSynchronize();
 
@@ -355,8 +361,13 @@ void SegmentMCinput(std::string target_class, int target_index){
   cudaMemcpy(h_pos, d_pos, sizeof(float) * totalVerts * 4, cudaMemcpyDeviceToHost);
 
   for(int i{0};i<totalVerts;i++){
-    Segmented_Vertices[target_index].push_back(Eigen::Vector3d(h_pos[i].x, h_pos[i].y, h_pos[i].z));
-    if(i%3==2) Segmented_Triangles[target_index].push_back(Eigen::Vector3i(i-2, i-1, i));
+    float3 temp {h_pos[i].x, h_pos[i].y, h_pos[i].z};
+    Segmented_Vertices[target_index].push_back(temp);
+
+    if(i%3==2){
+      int3 temp2 {i-2,i-1,i};
+      Segmented_Triangles[target_index].push_back(temp2);
+    }
   }
   auto end = std::chrono::system_clock::now();
   printf("| [%s] Data Copy Time (Device to Host)              : %f sec\n", target_class.c_str(), std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0);
@@ -441,48 +452,7 @@ void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     
     case 's':
       mtx.lock();
-      if(isMask)
-      {
-        std::cout << "+---------------------------------- Mesh Generation ----------------------------------+\n";
-        
-        if(isMultiThread){
-          auto start = std::chrono::system_clock::now();
-          // Get the segmented Marching Cubes input data from voxel data
-          for(int i {0}; i<5; i++){
-            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
-            cudaDeviceSynchronize();
-            SegmentMCinput(target_segment_classes[i],i);
-          }
-
-          auto chk = std::chrono::system_clock::now();
-
-          // Generate thread for each class, and save the mesh data to txt file.
-          std::vector<std::thread> threads;
-          for (int i {0}; i<5; i++){
-            threads.push_back(std::thread {WriteTxtFileSeg, target_segment_classes[i], std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
-          }
-          for (auto& th : threads) th.join();
-
-          auto end = std::chrono::system_clock::now();
-          std::cout << "Total Sequential Calculation Time for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(chk - start).count() / 1000.0 << "sec\n";
-          std::cout << "Total Parallel Processing for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(end - chk).count() / 1000.0 << "sec\n";
-        }
-        else{
-          auto start = std::chrono::system_clock::now();
-          for(int i{0};i<5;i++){
-            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
-            cudaDeviceSynchronize();
-            SegmentMCinput(target_segment_classes[i],i);
-            WriteTxtFile(target_segment_classes[i],i);
-          }
-          auto end = std::chrono::system_clock::now();
-          printf("Total saving Time for 5 classes: %f sec\n", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0);
-        }
-      }
-      else{
-        computeIsosurface(); cudaDeviceSynchronize(); 
-        WriteTxtFile("all");
-      }
+      testSave();
 
       mtx.unlock();
   }
@@ -678,10 +648,8 @@ bool initGL(int *argc, char **argv) {
   gl_Shader = compileASMShader(GL_FRAGMENT_PROGRAM_ARB, shader_code);
 
   glutReportErrors();
-
   return true;
 }
-
 
 void initMenus() {
   glutCreateMenu(mainMenu);
@@ -755,7 +723,7 @@ void renderIsosurface() {
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void RemoveDuplicatedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles)
+void RemoveDuplicatedVertices(std::vector<float3> &vertices, std::vector<int3> &triangles)
 {
   typedef std::tuple<double, double, double> Coordinate3;
   std::unordered_map<Coordinate3, size_t, hash_tuple<Coordinate3>>point_to_old_index;
@@ -763,8 +731,8 @@ void RemoveDuplicatedVertices(std::vector<Eigen::Vector3d> &vertices, std::vecto
   size_t old_vertex_num = vertices.size();
   size_t k = 0;                                  // new index
   for (size_t i = 0; i < old_vertex_num; i++) {  // old index
-      Coordinate3 coord = std::make_tuple(vertices[i](0), vertices[i](1),
-                                          vertices[i](2));
+      Coordinate3 coord = std::make_tuple(vertices[i].x, vertices[i].y,
+                                          vertices[i].z);
       if (point_to_old_index.find(coord) == point_to_old_index.end()) {
           point_to_old_index[coord] = i;
           vertices[k] = vertices[i];
@@ -777,20 +745,20 @@ void RemoveDuplicatedVertices(std::vector<Eigen::Vector3d> &vertices, std::vecto
   vertices.resize(k);
   if (k < old_vertex_num) {
       for (auto &triangle : triangles) {
-          triangle(0) = index_old_to_new[triangle(0)];
-          triangle(1) = index_old_to_new[triangle(1)];
-          triangle(2) = index_old_to_new[triangle(2)];
+          triangle.x = index_old_to_new[triangle.x];
+          triangle.y = index_old_to_new[triangle.y];
+          triangle.z = index_old_to_new[triangle.z];
       }
   }
 }
 
-void RemoveUnreferencedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles)
+void RemoveUnreferencedVertices(std::vector<float3> &vertices, std::vector<int3> &triangles)
 {
   std::vector<bool> vertex_has_reference(vertices.size(), false);
   for (const auto &triangle : triangles) {
-      vertex_has_reference[triangle(0)] = true;
-      vertex_has_reference[triangle(1)] = true;
-      vertex_has_reference[triangle(2)] = true;
+      vertex_has_reference[triangle.x] = true;
+      vertex_has_reference[triangle.y] = true;
+      vertex_has_reference[triangle.z] = true;
   }
   std::vector<int> index_old_to_new(vertices.size());
   size_t old_vertex_num = vertices.size();
@@ -807,9 +775,9 @@ void RemoveUnreferencedVertices(std::vector<Eigen::Vector3d> &vertices, std::vec
   vertices.resize(k);
   if (k < old_vertex_num) {
       for (auto &triangle : triangles) {
-          triangle(0) = index_old_to_new[triangle(0)];
-          triangle(1) = index_old_to_new[triangle(1)];
-          triangle(2) = index_old_to_new[triangle(2)];
+          triangle.x = index_old_to_new[triangle.x];
+          triangle.y = index_old_to_new[triangle.y];
+          triangle.z = index_old_to_new[triangle.z];
       }
   }
 }
@@ -821,7 +789,7 @@ void RemoveUnreferencedVertices(std::vector<Eigen::Vector3d> &vertices, std::vec
  * @param vertices 
  * @param triangles 
  */
-void SimplifyMesh(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles)
+void SimplifyMesh(std::vector<float3> &vertices, std::vector<int3> &triangles)
 {
   size_t original_vertex_size = vertices.size();
   size_t original_triangle_size = triangles.size();
@@ -841,7 +809,7 @@ void SimplifyMesh(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vec
   std::cout << "| Time for removing unreferenced vertices      : " << std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_chk1).count() <<" ms\n";
 }
 
-void SimplifyMeshSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles)
+void SimplifyMeshSeg(std::string target_class, std::vector<float3> &vertices, std::vector<int3> &triangles)
 {
   size_t original_vertex_size = vertices.size();
   size_t original_triangle_size = triangles.size();
@@ -879,13 +847,18 @@ void WriteTxtFile(std::string target_class, double decimation_ratio)
   cudaMemcpy(h_pos, d_pos, sizeof(float) * totalVerts * 4, cudaMemcpyDeviceToHost);
 
   // For Mesh simplification by using Open3D
-  std::vector<Eigen::Vector3d> vertices;
-  std::vector<Eigen::Vector3i> triangles;
+  std::vector<float3> vertices;
+  std::vector<int3> triangles;
   for (auto i{0}; i<totalVerts; ++i)
   {
     auto const& v = h_pos[i];
-    vertices.push_back(Eigen::Vector3d(v.x, v.y, v.z));
-    if(i%3==2) triangles.push_back(Eigen::Vector3i(i-2, i-1, i));
+    float3 temp {v.x, v.y, v.z};
+    vertices.push_back(temp);
+    if(i%3==2) 
+    {
+      int3 temp2 {i-2,i-1,i};
+      triangles.push_back(temp2);
+    }
   }
   end = std::chrono::system_clock::now();
   std::cout << "| Data Copy and Convert Time                   : " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
@@ -924,8 +897,11 @@ void WriteTxtFile(std::string target_class, double decimation_ratio)
  * @param target_index 
  * @param decimation_ratio 
  */
-void WriteTxtFileSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles, double decimation_ratio)
+void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio)
 {
+  std::vector<float3> simple_vertices;
+  std::vector<int3> simple_triangles;
+
   std::string filename = std::string("/home/do/ros2_ws/src/gv_recon/mesh_data_") + target_class + ".txt";
   auto start = std::chrono::system_clock::now();
   // First, Simplify mesh by removing duplicated vertices and removing unreferenced vertices
@@ -937,13 +913,65 @@ void WriteTxtFileSeg(std::string target_class, std::vector<Eigen::Vector3d> &ver
   decimator.simplify_mesh(target_face_num,7.0,true);
   auto end = std::chrono::system_clock::now();
 
-  printf("| [%s] Output Vertices : %d, Output Triangles : %d\n", target_class.c_str(), decimator.getVertexCount(), decimator.getTriangleCount());
-  printf("| [%s] Time for Removing Duplicates and Fast Quadric Decimation : %lld ms\n", target_class.c_str(), std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-  decimator.save_txt(filename);
-	
+  printf("| [%s] Output Vertices : %ld, Output Triangles : %ld\n", target_class.c_str(), decimator.getVertexCount(), decimator.getTriangleCount());
+  printf("| [%s] Time for Removing Duplicates and Fast Quadric Decimation : %ld ms\n", target_class.c_str(), std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+  // decimator.save_txt(filename);
+	simple_vertices = decimator.getVertices();
+  simple_triangles = decimator.getTriangles();
+  shm_manager[target_idx].SendMesh(simple_vertices, simple_triangles);
+  
   vertices.clear();
   triangles.clear();
   std::cout << "+-------------------------------------------------------------------------------------+\n";
 }
+
+void testSave(){
+  if(isMask)
+      {
+        std::cout << "+---------------------------------- Mesh Generation ----------------------------------+\n";
+        
+        if(isMultiThread){
+          auto start = std::chrono::system_clock::now();
+          // Get the segmented Marching Cubes input data from voxel data
+          for(int i {0}; i<5; i++){
+            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
+            cudaDeviceSynchronize();
+            SegmentMCinput(target_segment_classes[i],i);
+          }
+
+          auto chk = std::chrono::system_clock::now();
+
+          // Generate thread for each class, and save the mesh data to txt file.
+          std::vector<std::thread> threads;
+          for (int i {0}; i<5; i++){
+            threads.push_back(std::thread {WriteTxtFileSeg, target_segment_classes[i], i, std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
+          }
+          for (auto& th : threads) th.join();
+
+
+
+          auto end = std::chrono::system_clock::now();
+          std::cout << "Total Sequential Calculation Time for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(chk - start).count() / 1000.0 << "sec\n";
+          std::cout << "Total Parallel Processing for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(end - chk).count() / 1000.0 << "sec\n";
+        }
+        else{
+          auto start = std::chrono::system_clock::now();
+          for(int i{0};i<5;i++){
+            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
+            cudaDeviceSynchronize();
+            SegmentMCinput(target_segment_classes[i],i);
+            WriteTxtFile(target_segment_classes[i],i);
+          }
+          auto end = std::chrono::system_clock::now();
+          printf("Total saving Time for 5 classes: %f sec\n", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0);
+        }
+      }
+      else{
+        computeIsosurface(); cudaDeviceSynchronize(); 
+        WriteTxtFile("all");
+      }
+}
+
+
 
 }

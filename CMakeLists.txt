@@ -38,9 +38,12 @@ find_package(Open3D REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(TBB REQUIRED)
+find_package(protobuf CONFIG REQUIRED)
 #find_package(TooN   REQUIRED)
 add_definitions(-D_USE_MATH_DEFINES)
 add_definitions(${icl_core_DEFINITIONS} ${gpu_voxels_DEFINITIONS})
+
+set(PROTOS mesh.proto)
 
 ###########
 ## Build ##
@@ -89,11 +92,19 @@ LIST(APPEND SOURCEFILES
     src/SyncedSubNode.cpp
     src/marchingCubes.cpp
     src/FastQuadric.cpp
+    include/SHM/SharedMemoryManager.hpp
     # include/glDefines.h
     src/main.cpp
     )
 
-add_executable(az_yoso ${SOURCEFILES})
+if(protobuf_MODULE_COMPATIBLE) #Legacy Support
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${${PROTOS}})
+    list(APPEND SRCS PROTO_SRCS PROTO_HDRS)
+endif()
+
+add_executable(az_yoso ${SOURCEFILES} ${PROTOS})
+
+target_include_directories(az_yoso PUBLIC ${PROTOBUF_INCLUDE_DIRS})
 
 target_link_directories(az_yoso PUBLIC
   ${Open3D_LIBRARY_DIRS}
@@ -111,6 +122,7 @@ target_link_libraries(az_yoso
                       ${gpu_voxels_LIBRARIES}
                       ${GLUT_LIBRARIES}
                       Open3D::Open3D
+                      protobuf::libprotobuf
                       )
 ament_target_dependencies(az_yoso
   rclcpp
@@ -121,7 +133,7 @@ ament_target_dependencies(az_yoso
   )
 ##########################################################################
 
-
+protobuf_generate(TARGET az_yoso)
 
 install(TARGETS
   az_yoso

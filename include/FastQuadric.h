@@ -25,7 +25,7 @@
 #undef Success
 #endif
 
-#include <Eigen/Dense>
+#include "SHM/SharedMemoryManager.hpp"
 #define loopi(start_l,end_l) for ( int i=start_l;i<end_l;++i )
 #define loopi(start_l,end_l) for ( int i=start_l;i<end_l;++i )
 #define loopj(start_l,end_l) for ( int j=start_l;j<end_l;++j )
@@ -306,8 +306,8 @@ class SymetricMatrix {
 	double m[10];
 };
 
-struct Triangle { int v[3];double err[4];int deleted,dirty,attr;vec3f n; };
-struct Vertex { vec3f p;int tstart,tcount;SymetricMatrix q;int border;};
+struct fqTriangle { int v[3];double err[4];int deleted,dirty,attr;vec3f n; };
+struct fqVertex { vec3f p;int tstart,tcount;SymetricMatrix q;int border;};
 struct Ref { int tid,tvertex; };
 
 ///////////////////////////////////////////
@@ -321,23 +321,25 @@ enum Attributes {
 class FastQuadricDecimator
 {
 public:
-	FastQuadricDecimator(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles); // Constructor
+	FastQuadricDecimator(std::vector<float3> &vertices, std::vector<int3> &triangles); // Constructor
 	~FastQuadricDecimator(); // Destructor
+	std::vector<float3> getVertices();
+	std::vector<int3> getTriangles();
 	void simplify_mesh(int target_count, double agressiveness, bool verbose); // Main Simplification function
 	size_t getVertexCount();
 	size_t getTriangleCount();
 	void save_txt(std::string filename);
 private:
 	// Variables & Strctures
-	std::vector<Triangle> _triangles;
-	std::vector<Vertex> _vertices;
+	std::vector<fqTriangle> _triangles;
+	std::vector<fqVertex> _vertices;
 	std::vector<Ref> _refs;
 
     // Helper functions
 	double vertex_error(SymetricMatrix q, double x, double y, double z);
 	double calculate_error(int id_v1, int id_v2, vec3f &p_result);
-	bool flipped(vec3f p,int i0,int i1,Vertex &v0,Vertex &v1,std::vector<int> &deleted);
-	void update_triangles(int i0,Vertex &v,std::vector<int> &deleted,int &deleted_triangles);
+	bool flipped(vec3f p,int i0,int i1,fqVertex &v0,fqVertex &v1,std::vector<int> &deleted);
+	void update_triangles(int i0,fqVertex &v,std::vector<int> &deleted,int &deleted_triangles);
 	void update_mesh(int iteration);
 	void compact_mesh();
 	char* trimwhitespace(char *str);

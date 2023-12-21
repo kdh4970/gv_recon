@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// message Vertex {
+//     repeated float position = 1;
+// }
+
+// message Triangle {
+//     repeated int32 vertex_indices = 1;
+// }
+
+// message Mesh {
+//     string class_info = 1;
+//     repeated Vertex vertices = 2;
+//     repeated Triangle triangles = 3;
+// }
+message Mesh {
+        string class_info = 1;
+        repeated float vertices = 2;
+        repeated int32 triangles = 3;
+    }

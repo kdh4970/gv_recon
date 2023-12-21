@@ -141,19 +141,21 @@ void computeFPS();
 
 void SegmentMCinput(std::string target_class, int target_index);
 
-void RemoveDuplicatedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+void RemoveDuplicatedVertices(std::vector<float3> &vertices, std::vector<int3> &triangles);
 
-void RemoveUnreferencedVertices(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+void RemoveUnreferencedVertices(std::vector<float3> &vertices, std::vector<int3> &triangles);
 
-void SimplifyMesh(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+void SimplifyMesh(std::vector<float3> &vertices, std::vector<int3> &triangles);
 
-void SimplifyMeshSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles);
+void SimplifyMeshSeg(std::string target_class, std::vector<float3> &vertices, std::vector<int3> &triangles);
 
 void WriteTxtFile(std::string target_class, double decimation_ratio=0.5);
 
-void WriteTxtFileSeg(std::string target_class, std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles, double decimation_ratio=0.5);
+void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio=0.5);
 
 GLuint compileASMShader(GLenum program_type, const char *code);
+
+void testSave();
 
 }
 #endif // MARCHINGCUBES_H

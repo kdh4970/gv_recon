@@ -1,24 +1,24 @@
 #include "FastQuadric.h"
 
-FastQuadricDecimator::FastQuadricDecimator(std::vector<Eigen::Vector3d> &vertices, std::vector<Eigen::Vector3i> &triangles)
+FastQuadricDecimator::FastQuadricDecimator(std::vector<float3> &vertices, std::vector<int3> &triangles)
 {
-	Vertex tempVertex;
-	Triangle tempTriangle;
+	fqVertex tempVertex;
+	fqTriangle tempTriangle;
 	
 	// second. insert data
 	for(auto i: vertices)
 	{
-		tempVertex.p.x = i(0);
-		tempVertex.p.y = i(1);
-		tempVertex.p.z = i(2);
+		tempVertex.p.x = i.x;
+		tempVertex.p.y = i.y;
+		tempVertex.p.z = i.z;
 		_vertices.push_back(tempVertex);
 	}
 	for(auto i: triangles)
 	{
 		// write something...
-		tempTriangle.v[0] = i(0);
-		tempTriangle.v[1] = i(1);
-		tempTriangle.v[2] = i(2);
+		tempTriangle.v[0] = i.x;
+		tempTriangle.v[1] = i.y;
+		tempTriangle.v[2] = i.z;
 
 		_triangles.push_back(tempTriangle);
 	}
@@ -31,6 +31,35 @@ FastQuadricDecimator::~FastQuadricDecimator()
 size_t FastQuadricDecimator::getVertexCount() {return _vertices.size();}
 size_t FastQuadricDecimator::getTriangleCount() {return _triangles.size();}
 
+std::vector<float3> FastQuadricDecimator::getVertices(){
+	std::vector<float3> vertices;
+	for(auto i: _vertices)
+	{
+		float3 temp;
+		temp.x = i.p.x;
+		temp.y = i.p.y;
+		temp.z = i.p.z;
+		vertices.push_back(temp);
+	}
+
+	return vertices;
+}
+
+std::vector<int3> FastQuadricDecimator::getTriangles(){
+	std::vector<int3> triangles;
+	for(auto i: _triangles)
+	{
+		int3 temp;
+		temp.x = i.v[0];
+		temp.y = i.v[1];
+		temp.z = i.v[2];
+		triangles.push_back(temp);
+	}
+
+	return triangles;
+}
+
+
 void FastQuadricDecimator::save_txt(std::string filename){
 	  // Open target obj file to write
 	FILE *fp=fopen(filename.c_str(), "w");
@@ -42,13 +71,13 @@ void FastQuadricDecimator::save_txt(std::string filename){
 	// Write vertex list
 	for(int i=0;i<getVertexCount();i++)
 	{
-		Vertex &v=_vertices[i];
+		fqVertex &v=_vertices[i];
 		fprintf(fp,"v %f %f %f\n",v.p.x,v.p.y,v.p.z);
 	}
 	// Write face list
 	for(int i=0;i<getTriangleCount();i++)
 	{
-		Triangle &t=_triangles[i];
+		fqTriangle &t=_triangles[i];
 		fprintf(fp,"f %d %d %d\n",t.v[0],t.v[1],t.v[2]);
 	}
 	fclose(fp);
@@ -92,15 +121,15 @@ void FastQuadricDecimator::simplify_mesh(int target_count, double agressiveness=
 			// remove vertices & mark deleted triangles
 			loopi(0,_triangles.size())
 			{
-				Triangle &t=_triangles[i];
+				fqTriangle &t=_triangles[i];
 				if(t.err[3]>threshold) continue;
 				if(t.deleted) continue;
 				if(t.dirty) continue;
 
 				loopj(0,3)if(t.err[j]<threshold)
 				{
-					int i0=t.v[ j     ]; Vertex &v0 = _vertices[i0];
-					int i1=t.v[(j+1)%3]; Vertex &v1 = _vertices[i1];
+					int i0=t.v[ j     ]; fqVertex &v0 = _vertices[i0];
+					int i1=t.v[(j+1)%3]; fqVertex &v1 = _vertices[i1];
 					// Border check
 					if(v0.border != v1.border)  continue;
 
@@ -146,12 +175,12 @@ void FastQuadricDecimator::simplify_mesh(int target_count, double agressiveness=
 
 // Check if a triangle flips when this edge is removed
 
-bool FastQuadricDecimator::flipped(vec3f p,int i0,int i1,Vertex &v0,Vertex &v1,std::vector<int> &deleted)
+bool FastQuadricDecimator::flipped(vec3f p,int i0,int i1,fqVertex &v0,fqVertex &v1,std::vector<int> &deleted)
 {
 
 	loopk(0,v0.tcount)
 	{
-		Triangle &t=_triangles[_refs[v0.tstart+k].tid];
+		fqTriangle &t=_triangles[_refs[v0.tstart+k].tid];
 		if(t.deleted)continue;
 
 		int s=_refs[v0.tstart+k].tvertex;
@@ -179,13 +208,13 @@ bool FastQuadricDecimator::flipped(vec3f p,int i0,int i1,Vertex &v0,Vertex &v1,s
 
 // Update triangle connections and edge error after a edge is collapsed
 
-void FastQuadricDecimator::update_triangles(int i0,Vertex &v,std::vector<int> &deleted,int &deleted_triangles)
+void FastQuadricDecimator::update_triangles(int i0,fqVertex &v,std::vector<int> &deleted,int &deleted_triangles)
 {
 	vec3f p;
 	loopk(0,v.tcount)
 	{
 		Ref &r=_refs[v.tstart+k];
-		Triangle &t=_triangles[r.tid];
+		fqTriangle &t=_triangles[r.tid];
 		if(t.deleted)continue;
 		if(deleted[k])
 		{
@@ -226,13 +255,13 @@ void FastQuadricDecimator::update_mesh(int iteration)
 	}
 	loopi(0,_triangles.size())
 	{
-		Triangle &t=_triangles[i];
+		fqTriangle &t=_triangles[i];
 		loopj(0,3) _vertices[t.v[j]].tcount++;
 	}
 	int tstart=0;
 	loopi(0,_vertices.size())
 	{
-		Vertex &v=_vertices[i];
+		fqVertex &v=_vertices[i];
 		v.tstart=tstart;
 		tstart+=v.tcount;
 		v.tcount=0;
@@ -242,10 +271,10 @@ void FastQuadricDecimator::update_mesh(int iteration)
 	_refs.resize(_triangles.size()*3);
 	loopi(0,_triangles.size())
 	{
-		Triangle &t=_triangles[i];
+		fqTriangle &t=_triangles[i];
 		loopj(0,3)
 		{
-			Vertex &v=_vertices[t.v[j]];
+			fqVertex &v=_vertices[t.v[j]];
 			_refs[v.tstart+v.tcount].tid=i;
 			_refs[v.tstart+v.tcount].tvertex=j;
 			v.tcount++;
@@ -269,13 +298,13 @@ void FastQuadricDecimator::update_mesh(int iteration)
 
 		loopi(0,_vertices.size())
 		{
-			Vertex &v=_vertices[i];
+			fqVertex &v=_vertices[i];
 			vcount.clear();
 			vids.clear();
 			loopj(0,v.tcount)
 			{
 				int k=_refs[v.tstart+j].tid;
-				Triangle &t=_triangles[k];
+				fqTriangle &t=_triangles[k];
 				loopk(0,3)
 				{
 					int ofs=0,id=t.v[k];
@@ -302,7 +331,7 @@ void FastQuadricDecimator::update_mesh(int iteration)
 
 		loopi(0,_triangles.size())
 		{
-			Triangle &t=_triangles[i];
+			fqTriangle &t=_triangles[i];
 			vec3f n,p[3];
 			loopj(0,3) p[j]=_vertices[t.v[j]].p;
 			n.cross(p[1]-p[0],p[2]-p[0]);
@@ -314,7 +343,7 @@ void FastQuadricDecimator::update_mesh(int iteration)
 		loopi(0,_triangles.size())
 		{
 			// Calc Edge Error
-			Triangle &t=_triangles[i];vec3f p;
+			fqTriangle &t=_triangles[i];vec3f p;
 			loopj(0,3) t.err[j]=calculate_error(t.v[j],t.v[(j+1)%3],p);
 			t.err[3]=min(t.err[0],min(t.err[1],t.err[2]));
 		}
@@ -333,7 +362,7 @@ void FastQuadricDecimator::compact_mesh()
 	loopi(0,_triangles.size())
 	if(!_triangles[i].deleted)
 	{
-		Triangle &t=_triangles[i];
+		fqTriangle &t=_triangles[i];
 		_triangles[dst++]=t;
 		loopj(0,3)_vertices[t.v[j]].tcount=1;
 	}
@@ -348,7 +377,7 @@ void FastQuadricDecimator::compact_mesh()
 	}
 	loopi(0,_triangles.size())
 	{
-		Triangle &t=_triangles[i];
+		fqTriangle &t=_triangles[i];
 		loopj(0,3)t.v[j]=_vertices[t.v[j]].tstart;
 	}
 	_vertices.resize(dst);

@@ -123,6 +123,7 @@ void run_glut_with_marchingCubes(int argc, char** argv)
   {
     shm_manager[i].init(1000+i,target_segment_classes[i]);
   }
+  
 
 ////////////////
 // GLUT Setup //
@@ -552,6 +553,7 @@ void display() {
     {
       cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
       computeIsosurface();
+      testSave();
       // do nothing now...
     }
     else{
@@ -734,20 +736,20 @@ void RemoveDuplicatedVertices(std::vector<float3> &vertices, std::vector<int3> &
       Coordinate3 coord = std::make_tuple(vertices[i].x, vertices[i].y,
                                           vertices[i].z);
       if (point_to_old_index.find(coord) == point_to_old_index.end()) {
-          point_to_old_index[coord] = i;
-          vertices[k] = vertices[i];
-          index_old_to_new[i] = (int)k;
-          k++;
+        point_to_old_index[coord] = i;
+        vertices[k] = vertices[i];
+        index_old_to_new[i] = (int)k;
+        k++;
       } else {
-          index_old_to_new[i] = index_old_to_new[point_to_old_index[coord]];
+        index_old_to_new[i] = index_old_to_new[point_to_old_index[coord]];
       }
   }
   vertices.resize(k);
   if (k < old_vertex_num) {
       for (auto &triangle : triangles) {
-          triangle.x = index_old_to_new[triangle.x];
-          triangle.y = index_old_to_new[triangle.y];
-          triangle.z = index_old_to_new[triangle.z];
+        triangle.x = index_old_to_new[triangle.x];
+        triangle.y = index_old_to_new[triangle.y];
+        triangle.z = index_old_to_new[triangle.z];
       }
   }
 }
@@ -825,7 +827,7 @@ void SimplifyMeshSeg(std::string target_class, std::vector<float3> &vertices, st
   printf("| [%s] Input Vertices : %d, Input Triangles : %d\n",target_class.c_str(), original_vertex_size, original_triangle_size);
   printf("| [%s] Deduplicated Vertices : %d, Deduplicated Triangles : %d\n", target_class.c_str(), vertices.size(), triangles.size());
   printf("| [%s] Time for removing duplicated vertices      : %lld ms\n", target_class.c_str(), std::chrono::duration_cast<std::chrono::milliseconds>(t_chk1 - t_start).count());
-  }
+}
 
 /**
  * @brief Function for writing mesh data to txt file for all classes data
@@ -918,6 +920,12 @@ void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<fl
   // decimator.save_txt(filename);
 	simple_vertices = decimator.getVertices();
   simple_triangles = decimator.getTriangles();
+
+  // for(int i{0};i<5;i++)
+  // {
+  //   shm_manager[i].init(1000+i,target_segment_classes[i]);
+  // }
+
   shm_manager[target_idx].SendMesh(simple_vertices, simple_triangles);
   
   vertices.clear();
@@ -927,51 +935,47 @@ void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<fl
 
 void testSave(){
   if(isMask)
-      {
-        std::cout << "+---------------------------------- Mesh Generation ----------------------------------+\n";
-        
-        if(isMultiThread){
-          auto start = std::chrono::system_clock::now();
-          // Get the segmented Marching Cubes input data from voxel data
-          for(int i {0}; i<5; i++){
-            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
-            cudaDeviceSynchronize();
-            SegmentMCinput(target_segment_classes[i],i);
-          }
-
-          auto chk = std::chrono::system_clock::now();
-
-          // Generate thread for each class, and save the mesh data to txt file.
-          std::vector<std::thread> threads;
-          for (int i {0}; i<5; i++){
-            threads.push_back(std::thread {WriteTxtFileSeg, target_segment_classes[i], i, std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
-          }
-          for (auto& th : threads) th.join();
-
-
-
-          auto end = std::chrono::system_clock::now();
-          std::cout << "Total Sequential Calculation Time for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(chk - start).count() / 1000.0 << "sec\n";
-          std::cout << "Total Parallel Processing for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(end - chk).count() / 1000.0 << "sec\n";
-        }
-        else{
-          auto start = std::chrono::system_clock::now();
-          for(int i{0};i<5;i++){
-            cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
-            cudaDeviceSynchronize();
-            SegmentMCinput(target_segment_classes[i],i);
-            WriteTxtFile(target_segment_classes[i],i);
-          }
-          auto end = std::chrono::system_clock::now();
-          printf("Total saving Time for 5 classes: %f sec\n", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0);
-        }
+  {
+    std::cout << "+---------------------------------- Mesh Generation ----------------------------------+\n";
+    
+    if(isMultiThread){
+      auto start = std::chrono::system_clock::now();
+      // Get the segmented Marching Cubes input data from voxel data
+      for(int i {0}; i<5; i++){
+        cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
+        cudaDeviceSynchronize();
+        SegmentMCinput(target_segment_classes[i],i);
       }
-      else{
-        computeIsosurface(); cudaDeviceSynchronize(); 
-        WriteTxtFile("all");
+
+      auto chk = std::chrono::system_clock::now();
+
+      // Generate thread for each class, and save the mesh data to txt file.
+      std::vector<std::thread> threads;
+      for (int i {0}; i<5; i++){
+        threads.push_back(std::thread {WriteTxtFileSeg, target_segment_classes[i], i, std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
       }
+      for (auto& th : threads) th.join();
+
+      auto end = std::chrono::system_clock::now();
+      std::cout << "Total Sequential Calculation Time for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(chk - start).count() / 1000.0 << "sec\n";
+      std::cout << "Total Parallel Processing for 5 classes: "<< std::chrono::duration_cast<std::chrono::milliseconds>(end - chk).count() / 1000.0 << "sec\n";
+    }
+    else{
+      auto start = std::chrono::system_clock::now();
+      for(int i{0};i<5;i++){
+        cudaMemcpy(d_mc_input, d_voxelRaw, sizeof(uchar) * numVoxels, cudaMemcpyDeviceToDevice);
+        cudaDeviceSynchronize();
+        SegmentMCinput(target_segment_classes[i],i);
+        WriteTxtFile(target_segment_classes[i],i);
+      }
+      auto end = std::chrono::system_clock::now();
+      printf("Total saving Time for 5 classes: %f sec\n", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0);
+    }
+  }
+  else{
+    computeIsosurface(); cudaDeviceSynchronize(); 
+    WriteTxtFile("all");
+  }
 }
-
-
 
 }

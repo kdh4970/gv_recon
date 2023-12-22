@@ -121,7 +121,8 @@ public:
       perror("Failed to lock semaphore");
       exit(1);
     }
-
+    
+    memset(_shmptr, 0, _size);
     std::string output_string;
     google::protobuf::io::ArrayOutputStream array_output(_shmptr, Serialized_data.size() + sizeof(int));
     google::protobuf::io::CodedOutputStream coded_output(&array_output);
@@ -138,7 +139,6 @@ public:
       perror("Failed to unlock semaphore");
       exit(1);
     }
-    
   }
 
 

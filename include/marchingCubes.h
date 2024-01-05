@@ -151,7 +151,7 @@ void SimplifyMeshSeg(std::string target_class, std::vector<float3> &vertices, st
 
 void WriteTxtFile(std::string target_class, double decimation_ratio=0.5);
 
-void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio=0.5);
+void SimplifyMeshAndUpload(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio=0.5);
 
 GLuint compileASMShader(GLenum program_type, const char *code);
 

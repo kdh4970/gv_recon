@@ -899,7 +899,7 @@ void WriteTxtFile(std::string target_class, double decimation_ratio)
  * @param target_index 
  * @param decimation_ratio 
  */
-void WriteTxtFileSeg(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio)
+void SimplifyMeshAndUpload(std::string target_class, size_t target_idx, std::vector<float3> &vertices, std::vector<int3> &triangles, double decimation_ratio)
 {
   std::vector<float3> simple_vertices;
   std::vector<int3> simple_triangles;
@@ -952,7 +952,7 @@ void testSave(){
       // Generate thread for each class, and save the mesh data to txt file.
       std::vector<std::thread> threads;
       for (int i {0}; i<5; i++){
-        threads.push_back(std::thread {WriteTxtFileSeg, target_segment_classes[i], i, std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
+        threads.push_back(std::thread {SimplifyMeshAndUpload, target_segment_classes[i], i, std::ref(Segmented_Vertices[i]), std::ref(Segmented_Triangles[i]), 0.5});
       }
       for (auto& th : threads) th.join();
 
